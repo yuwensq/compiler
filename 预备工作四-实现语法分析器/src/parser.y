@@ -3,22 +3,23 @@
     #include <assert.h>
     #include "parser.h"
     #include <cstring>
-    #include <stack>
     extern Ast ast;
     int yylex();
+    #define YYERROR_VERBOSE 1
     int yyerror(char const*);
-    int idx;
-    int leftCnt = 0;
+    Type *recentType;
 }
 
 %code requires {
     #include "Ast.h"
     #include "SymbolTable.h"
     #include "Type.h"
+    #include "Value.h"
 }
 
 %union {
     int itype;
+    float ftype;
     char* strtype;
     StmtNode* stmttype;
     ExprNode* exprtype;
@@ -29,15 +30,16 @@
 %start Program
 %token <strtype> ID STRING
 %token <itype> INTEGER
+%token <ftype> FLOATNUM
 %token IF ELSE WHILE
-%token INT VOID
+%token INT FLOAT VOID 
 %token LPAREN RPAREN LBRACE RBRACE SEMICOLON LBRACKET RBRACKET COMMA  
 %token ADD SUB MUL DIV MOD OR AND LESS LESSEQUAL GREATER GREATEREQUAL ASSIGN EQUAL NOTEQUAL NOT
 %token CONST
 %token RETURN CONTINUE BREAK
 
-%type<stmttype> Stmts Stmt AssignStmt ExprStmt BlockStmt IfStmt WhileStmt BreakStmt ContinueStmt ReturnStmt DeclStmt FuncDef ConstDeclStmt VarDeclStmt ConstDefList VarDef ConstDef VarDefList FuncFParam FuncFParams MaybeFuncFParams BlankStmt
-%type<exprtype> Exp AddExp Cond LOrExp PrimaryExp LVal RelExp LAndExp MulExp ConstExp EqExp UnaryExp InitVal ConstInitVal FuncRParams 
+%type<stmttype> Stmts Stmt AssignStmt ExprStmt BlockStmt IfStmt WhileStmt BreakStmt ContinueStmt ReturnStmt DeclStmt FuncDef ConstDeclStmt VarDeclStmt ConstDefList VarDef ConstDef VarDefList FuncFParam FuncFParams FuncFParamsList BlankStmt
+%type<exprtype> Exp AddExp Cond LOrExp PrimaryExp LVal RelExp LAndExp MulExp ConstExp EqExp UnaryExp InitVal ConstInitVal FuncRParams FuncRParamsList
 %type<type> Type
 
 %precedence THEN
@@ -74,7 +76,7 @@ LVal
         if(se == nullptr)
         {
             fprintf(stderr, "identifier \"%s\" is undefined\n", (char*)$1);
-            delete [](char*)$1;
+            delete []$1;
             assert(se != nullptr);
         }
         $$ = new Id(se);
@@ -164,37 +166,29 @@ PrimaryExp
             se = new ConstantSymbolEntry(type, std::string($1));
             globals->install(std::string($1), se);
         }
-        ExprNode* expr = new ExprNode(se);
-        $$ = expr;
+        $$ = new ExprNode(se);
     }
     | INTEGER {
         SymbolEntry* se = new ConstantSymbolEntry(TypeSystem::intType, $1);
         $$ = new Constant(se);
     }
+    | FLOATNUM {
+        SymbolEntry *se = new ConstantSymbolEntry(TypeSystem::floatType, $1);
+        $$ = new Constant(se);
+    }
     ;
 UnaryExp 
     : PrimaryExp {$$ = $1;}
-    | ID LPAREN FuncRParams RPAREN {
+    | ID LPAREN FuncRParamsList RPAREN {
         SymbolEntry* se;
         se = identifiers->lookup($1);
         if(se == nullptr)
         {
             fprintf(stderr, "function \"%s\" is undefined\n", (char*)$1);
-            delete [](char*)$1;
+            delete []$1;
             assert(se != nullptr);
         }
         $$ = new CallExpr(se, $3);
-    }
-    | ID LPAREN RPAREN {
-        SymbolEntry* se;
-        se = identifiers->lookup($1);
-        if(se == nullptr)
-        {
-            fprintf(stderr, "function \"%s\" is undefined\n", (char*)$1);
-            delete [](char*)$1;
-            assert(se != nullptr);
-        }
-        $$ = new CallExpr(se);
     }
     | ADD UnaryExp {$$ = $2;}
     | SUB UnaryExp {
@@ -277,18 +271,29 @@ LOrExp
 ConstExp
     : AddExp {$$ = $1;}
     ;
+FuncRParamsList
+    : FuncRParams {$$ = $1;}
+    | %empty {$$ = nullptr;}
+    ;
 FuncRParams 
     : Exp {$$ = $1;}
     | FuncRParams COMMA Exp {
         $$ = $1;
         $$->setNext($3);
     }
+    ;
 Type
     : INT {
         $$ = TypeSystem::intType;
+        recentType = TypeSystem::intType;
+    }
+    | FLOAT {
+        $$ = TypeSystem::floatType;
+        recentType = TypeSystem::floatType;
     }
     | VOID {
         $$ = TypeSystem::voidType;
+        recentType = TypeSystem::voidType;
     }
     ;
 DeclStmt
@@ -296,11 +301,8 @@ DeclStmt
     | ConstDeclStmt {$$ = $1;}
     ;
 VarDeclStmt
-    : Type VarDefList SEMICOLON {$$ = $2;}
-    ;
-ConstDeclStmt
-    : CONST Type ConstDefList SEMICOLON {
-        $$ = $3;
+    : Type VarDefList SEMICOLON {
+        $$ = $2;
     }
     ;
 VarDefList
@@ -308,7 +310,35 @@ VarDefList
         $$ = $1;
         $1->setNext($3);
     } 
-    | VarDef {$$ = $1;}
+    | VarDef { $$ = $1; }
+    ;
+VarDef
+    : ID {
+        SymbolEntry* se;
+        se = identifiers->lookup($1, true);
+        if (se != nullptr) { //重复定义了
+            fprintf(stderr, "variable \"%s\" is repeated declared\n", (char*)$1);
+            delete []$1;
+            assert(se == nullptr);
+        }
+        se = new IdentifierSymbolEntry(recentType, $1, identifiers->getLevel());
+        identifiers->install($1, se);
+        $$ = new DeclStmt(new Id(se));
+        delete []$1;
+    }
+    | ID ASSIGN InitVal {
+        SymbolEntry* se;
+        se = new IdentifierSymbolEntry(recentType, $1, identifiers->getLevel());
+        identifiers->install($1, se);
+        ((IdentifierSymbolEntry*)se)->setValue($3->getValue());
+        $$ = new DeclStmt(new Id(se), $3);
+        delete []$1;
+    }
+    ;
+ConstDeclStmt
+    : CONST Type ConstDefList SEMICOLON {
+        $$ = $3;
+    }
     ;
 ConstDefList
     : ConstDefList COMMA ConstDef {
@@ -317,27 +347,13 @@ ConstDefList
     }
     | ConstDef {$$ = $1;}
     ;
-VarDef
-    : ID {
-        SymbolEntry* se;
-        se = new IdentifierSymbolEntry(TypeSystem::intType, $1, identifiers->getLevel());
-        identifiers->install($1, se);
-        $$ = new DeclStmt(new Id(se));
-        delete []$1;
-    }
-    | ID ASSIGN InitVal {
-        SymbolEntry* se;
-        se = new IdentifierSymbolEntry(TypeSystem::intType, $1, identifiers->getLevel());
-        identifiers->install($1, se);
-        ((IdentifierSymbolEntry*)se)->setValue($3->getValue());
-        $$ = new DeclStmt(new Id(se), $3);
-        delete []$1;
-    }
-    ;
 ConstDef
     : ID ASSIGN ConstInitVal {
         SymbolEntry* se;
-        se = new IdentifierSymbolEntry(TypeSystem::constIntType, $1, identifiers->getLevel());
+        if (recentType == TypeSystem::intType)
+            se = new IdentifierSymbolEntry(TypeSystem::constIntType, $1, identifiers->getLevel());
+        else if (recentType == TypeSystem::floatType)
+            se = new IdentifierSymbolEntry(TypeSystem::constFloatType, $1, identifiers->getLevel());
         identifiers->install($1, se);
         ((IdentifierSymbolEntry*)se)->setValue($3->getValue());
         $$ = new DeclStmt(new Id(se), $3);
@@ -349,7 +365,6 @@ InitVal
         $$ = $1;
     }
     ;
-
 ConstInitVal
     : ConstExp {
         $$ = $1;
@@ -360,7 +375,7 @@ FuncDef
     Type ID {
         identifiers = new SymbolTable(identifiers);
     }
-    LPAREN MaybeFuncFParams RPAREN {
+    LPAREN FuncFParamsList RPAREN {
         Type* funcType;
         std::vector<Type*> vec;
         DeclStmt* temp = (DeclStmt*)$5;
@@ -383,7 +398,7 @@ FuncDef
         delete []$2;
     }
     ;
-MaybeFuncFParams
+FuncFParamsList
     : FuncFParams {$$ = $1;}
     | %empty {$$ = nullptr;}
 FuncFParams
@@ -401,12 +416,11 @@ FuncFParam
         $$ = new DeclStmt(new Id(se));
         delete []$2;
     }
-    
     ;
 %%
 
 int yyerror(char const* message)
 {
-    std::cerr<<message<<std::endl;
+    std::cerr << message << std::endl;
     return -1;
 }
