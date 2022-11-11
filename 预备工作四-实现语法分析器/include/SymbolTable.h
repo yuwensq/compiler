@@ -4,6 +4,7 @@
 #include <assert.h>
 #include <map>
 #include <string>
+#include "Value.h"
 
 class Type;
 
@@ -35,15 +36,16 @@ class SymbolEntry {
 */
 class ConstantSymbolEntry : public SymbolEntry {
    private:
-    int value;
+    Value value;
     std::string strValue;
 
    public:
     ConstantSymbolEntry(Type* type, int value);
+    ConstantSymbolEntry(Type* type, float value);
     ConstantSymbolEntry(Type* type, std::string strValue);
     ConstantSymbolEntry(Type* type);
     virtual ~ConstantSymbolEntry(){};
-    int getValue() const;
+    Value getValue() const;
     std::string getStrValue() const;
     std::string toStr();
     // You can add any function you need here.
@@ -77,7 +79,7 @@ class IdentifierSymbolEntry : public SymbolEntry {
     enum { GLOBAL, PARAM, LOCAL };
     std::string name;
     int scope;
-    int value;
+    Value value;
     bool initial;
 
     // You can add any field you need here.
@@ -87,8 +89,8 @@ class IdentifierSymbolEntry : public SymbolEntry {
     virtual ~IdentifierSymbolEntry(){};
     std::string toStr();
     int getScope() const { return scope; };
-    void setValue(int value);
-    int getValue() const { return value; };
+    void setValue(Value value);
+    Value getValue() const { return value; };
     // You can add any function you need here.
 };
 
@@ -133,7 +135,7 @@ class SymbolTable {
     SymbolTable();
     SymbolTable(SymbolTable* prev);
     void install(std::string name, SymbolEntry* entry);
-    SymbolEntry* lookup(std::string name);
+    SymbolEntry* lookup(std::string name, bool local = false);
     SymbolTable* getPrev() { return prev; };
     int getLevel() { return level; };
     static int getLabel() { return counter++; };
