@@ -19,6 +19,8 @@
 DECIMIAL ([1-9][0-9]*|0)
 OCTAL (0[0-7]+)
 HEXADECIMAL (0[xX][0-9A-Fa-f]+)
+FLOATDEC ([0-9]*[.]?[0-9]*([Ee][+-]?[0-9]+)?)
+FLOATHEX (0[xX][0-9A-Fa-f]*[.]?[0-9A-Fa-f]*([Pp][+-]?[0-9]+)?)
 ID [[:alpha:]_][[:alpha:][:digit:]_]*
 STRING \".*\"
 EOL (\r\n|\n|\r)
@@ -30,15 +32,16 @@ BLOCKCOMMENTEND \*\/
 LINECOMMENT \/\/[^\n]*
 %%
 "int" {
-    /*
-    * Questions: 
-    *   Q1: Why we need to return INT in further labs?
-    *   Q2: What is "INT" actually?
-    */
     if(dump_tokens)
         DEBUG_FOR_LAB4("INT\tint");
     chars += strlen("int");
     return INT;
+}
+"float" {
+    if(dump_tokens)
+        DEBUG_FOR_LAB4("FLOAT\tfloat");
+    chars += strlen("float");
+    return FLOAT;
 }
 "void" {
     if(dump_tokens)
@@ -236,11 +239,8 @@ LINECOMMENT \/\/[^\n]*
     std::vector<Type*> vec;
     vec.push_back(TypeSystem::intType);
     Type* funcType = new FunctionType(TypeSystem::voidType, vec);
-    SymbolTable* st = identifiers;
-    while(st->getPrev())
-        st = st->getPrev();
-    SymbolEntry* se = new IdentifierSymbolEntry(funcType, yytext, st->getLevel());
-    st->install(yytext, se);
+    SymbolEntry* se = new IdentifierSymbolEntry(funcType, yytext, globals->getLevel());
+    globals->install(yytext, se);
     return ID;
 }
 
@@ -253,11 +253,35 @@ LINECOMMENT \/\/[^\n]*
     yylval.strtype = lexeme;
     std::vector<Type*> vec;
     Type* funcType = new FunctionType(TypeSystem::intType, vec);
-    SymbolTable* st = identifiers;
-    while(st->getPrev())
-        st = st->getPrev();
-    SymbolEntry* se = new IdentifierSymbolEntry(funcType, yytext, st->getLevel());
-    st->install(yytext, se);
+    SymbolEntry* se = new IdentifierSymbolEntry(funcType, yytext, globals->getLevel());
+    globals->install(yytext, se);
+    return ID;
+}
+"putfloat" {
+     if(dump_tokens)
+        DEBUG_FOR_LAB4(yytext);
+    char *lexeme;
+    lexeme = new char[strlen(yytext) + 1];
+    strcpy(lexeme, yytext);
+    yylval.strtype = lexeme;
+    std::vector<Type*> vec;
+    vec.push_back(TypeSystem::floatType);
+    Type* funcType = new FunctionType(TypeSystem::voidType, vec);
+    SymbolEntry* se = new IdentifierSymbolEntry(funcType, yytext, globals->getLevel());
+    globals->install(yytext, se);
+    return ID;
+}
+"getfloat" {
+    if(dump_tokens)
+        DEBUG_FOR_LAB4(yytext);
+    char *lexeme;
+    lexeme = new char[strlen(yytext) + 1];
+    strcpy(lexeme, yytext);
+    yylval.strtype = lexeme;
+    std::vector<Type*> vec;
+    Type* funcType = new FunctionType(TypeSystem::floatType, vec);
+    SymbolEntry* se = new IdentifierSymbolEntry(funcType, yytext, globals->getLevel());
+    globals->install(yytext, se);
     return ID;
 }
 "putch" {
@@ -270,11 +294,8 @@ LINECOMMENT \/\/[^\n]*
     std::vector<Type*> vec;
     vec.push_back(TypeSystem::intType);
     Type* funcType = new FunctionType(TypeSystem::voidType, vec);
-    SymbolTable* st = identifiers;
-    while(st->getPrev())
-        st = st->getPrev();
-    SymbolEntry* se = new IdentifierSymbolEntry(funcType, yytext, st->getLevel());
-    st->install(yytext, se);
+    SymbolEntry* se = new IdentifierSymbolEntry(funcType, yytext, globals->getLevel());
+    globals->install(yytext, se);
     return ID;
 }
 "getch" {
@@ -286,11 +307,8 @@ LINECOMMENT \/\/[^\n]*
     yylval.strtype = lexeme;
     std::vector<Type*> vec;
     Type* funcType = new FunctionType(TypeSystem::intType, vec);
-    SymbolTable* st = identifiers;
-    while(st->getPrev())
-        st = st->getPrev();
-    SymbolEntry* se = new IdentifierSymbolEntry(funcType, yytext, st->getLevel());
-    st->install(yytext, se);
+    SymbolEntry* se = new IdentifierSymbolEntry(funcType, yytext, globals->getLevel());
+    globals->install(yytext, se);
     return ID;
 }
 "putf" {
@@ -304,11 +322,8 @@ LINECOMMENT \/\/[^\n]*
     StringType* str = new StringType(0);
     vec.push_back(str);
     Type* funcType = new FunctionType(TypeSystem::voidType, vec);
-    SymbolTable* st = identifiers;
-    while(st->getPrev())
-        st = st->getPrev();
-    SymbolEntry* se = new IdentifierSymbolEntry(funcType, yytext, st->getLevel());
-    st->install(yytext, se);
+    SymbolEntry* se = new IdentifierSymbolEntry(funcType, yytext, globals->getLevel());
+    globals->install(yytext, se);
     return ID;
 }
 "starttime" {
@@ -320,11 +335,8 @@ LINECOMMENT \/\/[^\n]*
     yylval.strtype = lexeme;
     std::vector<Type*> vec;
     Type* funcType = new FunctionType(TypeSystem::voidType, vec);
-    SymbolTable* st = identifiers;
-    while(st->getPrev())
-        st = st->getPrev();
-    SymbolEntry* se = new IdentifierSymbolEntry(funcType, yytext, st->getLevel());
-    st->install(yytext, se);
+    SymbolEntry* se = new IdentifierSymbolEntry(funcType, yytext, globals->getLevel());
+    globals->install(yytext, se);
     return ID;
 }
 "stoptime" {
@@ -336,12 +348,17 @@ LINECOMMENT \/\/[^\n]*
     yylval.strtype = lexeme;
     std::vector<Type*> vec;
     Type* funcType = new FunctionType(TypeSystem::voidType, vec);
-    SymbolTable* st = identifiers;
-    while(st->getPrev())
-        st = st->getPrev();
-    SymbolEntry* se = new IdentifierSymbolEntry(funcType, yytext, st->getLevel());
-    st->install(yytext, se);
+    SymbolEntry* se = new IdentifierSymbolEntry(funcType, yytext, globals->getLevel());
+    globals->install(yytext, se);
     return ID;
+}
+{FLOATDEC} {
+    yylval.ftype =std::stof(yytext);
+    return FLOATNUM;
+}
+{FLOATHEX} {
+    yylval.ftype =std::stof(yytext);
+    return FLOATNUM;
 }
 {DECIMIAL} {
     if(dump_tokens)
