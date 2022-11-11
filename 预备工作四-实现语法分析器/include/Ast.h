@@ -2,6 +2,7 @@
 #define __AST_H__
 
 #include <fstream>
+#include "Value.h"
 
 class SymbolEntry;
 
@@ -31,7 +32,7 @@ class ExprNode : public Node {
     ExprNode(SymbolEntry* symbolEntry, int kind = EXPR)
         : kind(kind), symbolEntry(symbolEntry){};
     void output(int level);
-    virtual int getValue() { return 0; };
+    virtual Value getValue() { Value value(Value::INT, 0); return value; };
     bool isExpr() const { return kind == EXPR; };
     SymbolEntry* getSymbolEntry() const { return symbolEntry; };
 
@@ -61,7 +62,7 @@ class BinaryExpr : public ExprNode {
     BinaryExpr(SymbolEntry* se, int op, ExprNode* expr1, ExprNode* expr2)
         : ExprNode(se), op(op), expr1(expr1), expr2(expr2){};
     void output(int level);
-    int getValue();
+    Value getValue();
 };
 
 class UnaryExpr : public ExprNode {
@@ -74,7 +75,7 @@ class UnaryExpr : public ExprNode {
     UnaryExpr(SymbolEntry* se, int op, ExprNode* expr)
         : ExprNode(se), op(op), expr(expr){};
     void output(int level);
-    int getValue();
+    Value getValue();
 };
 
 class CallExpr : public ExprNode {
@@ -91,7 +92,7 @@ class Constant : public ExprNode {
    public:
     Constant(SymbolEntry* se) : ExprNode(se){};
     void output(int level);
-    int getValue();
+    Value getValue();
 };
 
 class Id : public ExprNode {
@@ -103,7 +104,7 @@ class Id : public ExprNode {
         : ExprNode(se), arrIdx(arrIdx){};
     void output(int level);
     SymbolEntry* getSymbolEntry() { return symbolEntry; };
-    int getValue();
+    Value getValue();
 };
 
 class StmtNode : public Node {};
