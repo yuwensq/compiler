@@ -1,10 +1,13 @@
 #include "Ast.h"
-#include "SymbolTable.h"
-#include "Unit.h"
-#include "Instruction.h"
-#include "IRBuilder.h"
+#include <stack>
 #include <string>
+#include <iostream>
+#include "IRBuilder.h"
+#include "Instruction.h"
+#include "SymbolTable.h"
 #include "Type.h"
+#include "Unit.h"
+extern Unit unit;
 
 extern FILE *yyout;
 int Node::counter = 0;
@@ -13,6 +16,17 @@ IRBuilder* Node::builder = nullptr;
 Node::Node()
 {
     seq = counter++;
+    next=nullptr;
+}
+
+void Node::setNext(Node *node)
+{
+    Node *n = this;
+    while (n->getNext())
+    {
+        n = n->getNext();
+    }
+    n->next = node;
 }
 
 void Node::backPatch(std::vector<Instruction*> &list, BasicBlock*bb)
@@ -194,77 +208,333 @@ void AssignStmt::genCode()
     new StoreInstruction(addr, src, bb);
 }
 
-void Ast::typeCheck()
+BinaryExpr::BinaryExpr(SymbolEntry* se,int op,ExprNode* expr1,ExprNode* expr2):ExprNode(se),op(op),expr1(expr1),expr2(expr2)
 {
+    dst = new Operand(se);
+    std::string op_type;
+    switch (op) {
+        case ADD:
+            op_type = "+";
+            break;
+        case SUB:
+            op_type = "-";
+            break;
+        case MUL:
+            op_type = "*";
+            break;
+        case DIV:
+            op_type = "/";
+            break;
+        case MOD:
+            op_type = "%";
+            break;
+        case AND:
+            op_type = "&&";
+            break;
+        case OR:
+            op_type = "||";
+            break;
+        case LESS:
+            op_type = "<";
+            break;
+        case LESSEQUAL:
+            op_type = "<=";
+            break;
+        case GREATER:
+            op_type = ">";
+            break;
+        case GREATEREQUAL:
+            op_type = ">=";
+            break;
+        case EQUAL:
+            op_type = "==";
+            break;
+        case NOTEQUAL:
+            op_type = "!=";
+            break;
+    }
+    if (expr1->getType()->isVoid() || expr2->getType()->isVoid()) {
+        fprintf(stderr,"invalid operand of type \'void\' to binary \'opeartor%s\'\n",op_type.c_str());
+    }
+    //前几个操作符是算术运算符，返回类型是int型，后面是逻辑运算符，返回类型是Bool型
+    if (op >= BinaryExpr::AND && op <= BinaryExpr::NOTEQUAL) {
+        type = TypeSystem::boolType;
+        //对于AND和OR逻辑运算，如果操作数表达式为int型，需要进行隐式转换，将int型转为bool型。
+        if (op == BinaryExpr::AND || op == BinaryExpr::OR) {
+            if (expr1->getType()->isInt() &&
+                expr1->getType()->getSize() == 32) {
+                ImplictCastExpr* temp = new ImplictCastExpr(expr1);
+                this->expr1 = temp; 
+            }
+            if (expr2->getType()->isInt() &&
+                expr2->getType()->getSize() == 32) {
+                ImplictCastExpr* temp = new ImplictCastExpr(expr2);
+                this->expr2 = temp;
+            }
+        }
+    } else
+        type = TypeSystem::intType;
+}
+
+UnaryExpr::UnaryExpr(SymbolEntry* se, int op, ExprNode* expr): ExprNode(se, UNARYEXPR), op(op), expr(expr) {
+    std::string op_type;
+    switch(op){
+        case NOT:
+            op_type="!";
+            break;
+        case SUB:
+            op_type="-";
+            break;
+    }
+    if (expr->getType()->isVoid()) {
+        fprintf(stderr,"invalid operand of type \'void\' to unary \'opeartor%s\'\n",op_type.c_str());
+    }
+    if (op == UnaryExpr::NOT) {
+        type = TypeSystem::intType;
+        dst = new Operand(se);
+        if (expr->isUnaryExpr()) {
+            UnaryExpr* ue = (UnaryExpr*)expr;
+            if (ue->getOp() == UnaryExpr::NOT) {
+                if (ue->getType() == TypeSystem::intType)
+                    ue->setType(TypeSystem::boolType);
+                // type = TypeSystem::intType;
+            }
+        }
+        // if (expr->getType()->isInt() && expr->getType()->getSize() == 32) {
+        //     ImplictCastExpr* temp = new ImplictCastExpr(expr);
+        //     this->expr = temp;
+        // }
+    } else if (op == UnaryExpr::SUB) {
+        type = TypeSystem::intType;
+        dst = new Operand(se);
+        if (expr->isUnaryExpr()) {
+            UnaryExpr* ue = (UnaryExpr*)expr;
+            if (ue->getOp() == UnaryExpr::NOT)
+                if (ue->getType() == TypeSystem::intType)
+                    ue->setType(TypeSystem::boolType);
+        }
+    }
+}
+
+CallExpr::CallExpr(SymbolEntry* se,ExprNode* param):ExprNode(se),param(param){
+    dst=nullptr;
+    //先统计实参数量
+    int RParamNum=0;
+    ExprNode* temp=param;
+    while(temp){
+        RParamNum++;
+        temp=temp->getNext();
+    }
+    //由于存在函数重载的情况，这里我们提前将重载的函数通过符号表项的next指针连接，这里需要根据实参个数判断对应哪一个具体函数，找到其对应得符号表项
+    SymbolEntry* s=se;
+    Type* type;
+    while(s){
+        type=s->getType();
+        std::vector<Type*> FParams=((FunctionType*)type)->getParamsType();
+        if(RParamNum==FParams.size()){
+            this->symbolEntry=s;
+            break;
+        }
+        s=s->getNext();
+    }
+    if(symbolEntry){
+        //如果函数返回值类型不为空，需要存储返回结果
+        this->type = ((FunctionType*)type)->getRetType();
+        if (this->type != TypeSystem::voidType) {
+            SymbolEntry* se =new TemporarySymbolEntry(this->type, SymbolTable::getLabel());
+            dst = new Operand(se);
+        }
+        std::vector<Type*> Fparams = ((FunctionType*)type)->getParamsType();
+        ExprNode* temp = param;
+        //逐个比较形参列表和实参列表中每个参数的类型是否相同
+        for (auto it = Fparams.begin(); it != Fparams.end(); it++) {
+            if (temp == nullptr) {
+                fprintf(stderr, "too few arguments to function %s %s\n",symbolEntry->toStr().c_str(), type->toStr().c_str());
+                break;
+            } else if ((*it)->getKind() != temp->getType()->getKind()){
+                fprintf(stderr, "parameter's type %s can't convert to %s\n",temp->getType()->toStr().c_str(),(*it)->toStr().c_str());
+            }    
+            temp =(temp->getNext());
+        }
+        if (temp != nullptr) {
+            fprintf(stderr, "too many arguments to function %s %s\n", symbolEntry->toStr().c_str(), type->toStr().c_str());
+        }
+    }
+}
+
+DeclStmt::DeclStmt(Id* id, ExprNode* expr = nullptr) : id(id) {
+    if (expr) {
+        this->expr = expr;
+        if (expr->isInitValueListExpr())
+            ((InitValueListExpr*)(this->expr))->fill();
+    }
+}
+
+IfStmt::IfStmt(ExprNode* cond, StmtNode* thenStmt): cond(cond), thenStmt(thenStmt) {
+    if (cond->getType()->isInt() && cond->getType()->getSize() == 32) {
+        ImplictCastExpr* temp = new ImplictCastExpr(cond);
+        this->cond = temp;
+    }
+}
+
+IfElseStmt::IfElseStmt(ExprNode* cond, StmtNode* thenStmt, StmtNode* elseStmt): cond(cond), thenStmt(thenStmt), elseStmt(elseStmt) {
+    if (cond->getType()->isInt() && cond->getType()->getSize() == 32) {
+        ImplictCastExpr* temp = new ImplictCastExpr(cond);
+        this->cond = temp;
+    }
+}
+
+WhileStmt::WhileStmt(ExprNode* cond, StmtNode* stmt=nullptr) : cond(cond), stmt(stmt) {
+    if (cond->getType()->isInt() && cond->getType()->getSize() == 32) {
+        ImplictCastExpr* temp = new ImplictCastExpr(cond);
+        this->cond = temp;
+    }
+}
+
+AssignStmt::AssignStmt(ExprNode* lval, ExprNode* expr): lval(lval), expr(expr) {
+    Type* type = ((Id*)lval)->getType();
+    SymbolEntry* se = lval->getSymbolEntry();
+    bool flag = true;
+    if (type->isInt()) {
+        if (((IntType*)type)->isConst()) {
+            fprintf(stderr,"cannot assign to variable \'%s\' with const-qualified type \'%s\'\n",
+                    ((IdentifierSymbolEntry*)se)->toStr().c_str(),type->toStr().c_str());
+            flag = false;
+        }
+    } 
+    if (flag && !expr->getType()->isInt()) {
+        fprintf(stderr,"cannot initialize a variable of type \'int\' with an rvalue of type \'%s\'\n",
+                expr->getType()->toStr().c_str());
+    }
+}
+
+bool Ast::typeCheck(Type* retType) {
+    if (root != nullptr)
+        return root->typeCheck();
+    return false;
+}
+
+bool FunctionDef::typeCheck(Type* retType) {
+    SymbolEntry* se = this->getSymbolEntry();
+    Type* ret = ((FunctionType*)(se->getType()))->getRetType();
+    StmtNode* stmt = this->stmt;
+    //如果定义部分为空，需根据返回值类型判断是否正确返回
+    if (stmt == nullptr) {
+        if (ret != TypeSystem::voidType)
+            fprintf(stderr, "non-void function does not return a value\n");
+        return false;
+    }
+    if (!stmt->typeCheck(ret)) {
+        fprintf(stderr, "function does not have a return statement\n");
+        return false;
+    }
+    return false;
+}
+
+bool BinaryExpr::typeCheck(Type* retType) {
+    return false;
+}
+
+bool Constant::typeCheck(Type* retType) {
+    return false;
+}
+
+bool Id::typeCheck(Type* retType) {
+    return false;
+}
+
+bool IfStmt::typeCheck(Type* retType) {
+    if (thenStmt)
+        return thenStmt->typeCheck(retType);
+    return false;
+}
+
+bool IfElseStmt::typeCheck(Type* retType) {
+    bool flag1 = false, flag2 = false;
+    if (thenStmt)
+        flag1 = thenStmt->typeCheck(retType);
+    if (elseStmt)
+        flag2 = elseStmt->typeCheck(retType);
+    return flag1 || flag2;
+}
+
+bool CompoundStmt::typeCheck(Type* retType) {
+    if (stmt)
+        return stmt->typeCheck(retType);
+    return false;
+}
+
+bool SeqNode::typeCheck(Type* retType) {
+    bool flag1 = false, flag2 = false;
+    if (stmt1)
+        flag1 = stmt1->typeCheck(retType);
+    if (stmt2)
+        flag2 = stmt2->typeCheck(retType);
+    return flag1 || flag2;
+}
+
+bool DeclStmt::typeCheck(Type* retType) {
+    return false;
+}
+
+bool ReturnStmt::typeCheck(Type* retType) {
+    if (!retType) {
+        fprintf(stderr, "expected unqualified-id\n");
+        return true;
+    }
+    if (!retValue && !retType->isVoid()) {
+        fprintf(stderr,"return-statement with no value, in function returning \'%s\'\n",retType->toStr().c_str());
+        return true;
+    }
+    if (retValue && retType->isVoid()) {
+        fprintf(stderr,"return-statement with a value, in function returning \'void\'\n");
+        return true;
+    }
+    if (!retValue || !retValue->getSymbolEntry())
+        return true;
+    Type* type = retValue->getType();
+    if (type != retType) {
+        fprintf(stderr,"cannot initialize return object of type \'%s\' with an rvalue ""of type \'%s\'\n",retType->toStr().c_str(), type->toStr().c_str());
+    }
+    return true;
+}
+
+bool AssignStmt::typeCheck(Type* retType) {
+    return false;
+}
+
+void Ast::output()
+{
+    fprintf(yyout, "program\n");
     if(root != nullptr)
-        root->typeCheck();
+        root->output(4);
 }
 
-void FunctionDef::typeCheck()
-{
-    // Todo
-}
-
-void BinaryExpr::typeCheck()
-{
-    // Todo
-}
-
-void Constant::typeCheck()
-{
-    // Todo
-}
-
-void Id::typeCheck()
-{
-    // Todo
-}
-
-void IfStmt::typeCheck()
-{
-    // Todo
-}
-
-void IfElseStmt::typeCheck()
-{
-    // Todo
-}
-
-void CompoundStmt::typeCheck()
-{
-    // Todo
-}
-
-void SeqNode::typeCheck()
-{
-    // Todo
-}
-
-void DeclStmt::typeCheck()
-{
-    // Todo
-}
-
-void ReturnStmt::typeCheck()
-{
-    // Todo
-}
-
-void AssignStmt::typeCheck()
-{
-    // Todo
+void ExprNode::output(int level) {
+    std::string name, type;
+    name = symbolEntry->toStr();
+    type = symbolEntry->getType()->toStr();
+    fprintf(yyout, "%*cconst string\ttype:%s\t%s\n", level, ' ', type.c_str(),name.c_str());
 }
 
 void BinaryExpr::output(int level)
 {
     std::string op_str;
-    switch(op)
-    {
+    switch (op) {
         case ADD:
             op_str = "add";
             break;
         case SUB:
             op_str = "sub";
+            break;
+        case MUL:
+            op_str = "mul";
+            break;
+        case DIV:
+            op_str = "div";
+            break;
+        case MOD:
+            op_str = "mod";
             break;
         case AND:
             op_str = "and";
@@ -275,17 +545,58 @@ void BinaryExpr::output(int level)
         case LESS:
             op_str = "less";
             break;
+        case LESSEQUAL:
+            op_str = "lessequal";
+            break;
+        case GREATER:
+            op_str = "greater";
+            break;
+        case GREATEREQUAL:
+            op_str = "greaterequal";
+            break;
+        case EQUAL:
+            op_str = "equal";
+            break;
+        case NOTEQUAL:
+            op_str = "notequal";
+            break;
     }
-    fprintf(yyout, "%*cBinaryExpr\top: %s\n", level, ' ', op_str.c_str());
+    fprintf(yyout, "%*cBinaryExpr\top: %s\ttype: %s\n", level, ' ',
+            op_str.c_str(), type->toStr().c_str());
     expr1->output(level + 4);
     expr2->output(level + 4);
 }
 
-void Ast::output()
-{
-    fprintf(yyout, "program\n");
-    if(root != nullptr)
-        root->output(4);
+void UnaryExpr::output(int level) {
+    std::string op_str;
+    switch (op) {
+        case NOT:
+            op_str = "not";
+            break;
+        case SUB:
+            op_str = "minus";
+            break;
+    }
+    fprintf(yyout, "%*cUnaryExpr\top: %s\ttype: %s\n", level, ' ',
+            op_str.c_str(), type->toStr().c_str());
+    expr->output(level + 4);
+}
+
+void CallExpr::output(int level) {
+    std::string name, type;
+    int scope;
+    if (symbolEntry) {
+        name = symbolEntry->toStr();
+        type = symbolEntry->getType()->toStr();
+        scope = dynamic_cast<IdentifierSymbolEntry*>(symbolEntry)->getScope();
+        fprintf(yyout, "%*cCallExpr\tfunction name: %s\tscope: %d\ttype: %s\n",level, ' ', name.c_str(), scope, type.c_str());
+        Node* temp = param;
+        //打印参数信息
+        while (temp) {
+            temp->output(level + 4);
+            temp = temp->getNext();
+        }
+    }
 }
 
 void Constant::output(int level)
@@ -304,8 +615,12 @@ void Id::output(int level)
     name = symbolEntry->toStr();
     type = symbolEntry->getType()->toStr();
     scope = dynamic_cast<IdentifierSymbolEntry*>(symbolEntry)->getScope();
-    fprintf(yyout, "%*cId\tname: %s\tscope: %d\ttype: %s\n", level, ' ',
-            name.c_str(), scope, type.c_str());
+    fprintf(yyout, "%*cId\tname: %s\tscope: %d\ttype: %s\n", level, ' ',name.c_str(), scope, type.c_str());
+}
+
+void ImplictCastExpr::output(int level) {
+    fprintf(yyout, "%*cImplictCastExpr\ttype: %s to %s\n", level, ' ',expr->getType()->toStr().c_str(), type->toStr().c_str());
+    this->expr->output(level + 4);
 }
 
 void CompoundStmt::output(int level)
@@ -324,6 +639,13 @@ void DeclStmt::output(int level)
 {
     fprintf(yyout, "%*cDeclStmt\n", level, ' ');
     id->output(level + 4);
+    if(expr){
+        expr->output(level+4);
+    }
+}
+
+void BlankStmt::output(int level) {
+    fprintf(yyout, "%*cBlankStmt\n", level, ' ');
 }
 
 void IfStmt::output(int level)
@@ -341,10 +663,26 @@ void IfElseStmt::output(int level)
     elseStmt->output(level + 4);
 }
 
+void WhileStmt::output(int level) {
+    fprintf(yyout, "%*cWhileStmt\n", level, ' ');
+    cond->output(level + 4);
+    stmt->output(level + 4);
+}
+void BreakStmt::output(int level) {
+    fprintf(yyout, "%*cBreakStmt\n", level, ' ');
+}
+
+void ContinueStmt::output(int level) {
+    fprintf(yyout, "%*cContinueStmt\n", level, ' ');
+}
+
 void ReturnStmt::output(int level)
 {
     fprintf(yyout, "%*cReturnStmt\n", level, ' ');
     retValue->output(level + 4);
+    if(retValue!=nullptr){
+        retValue->output(level+4);
+    }
 }
 
 void AssignStmt::output(int level)
@@ -361,5 +699,9 @@ void FunctionDef::output(int level)
     type = se->getType()->toStr();
     fprintf(yyout, "%*cFunctionDefine function name: %s, type: %s\n", level, ' ', 
             name.c_str(), type.c_str());
+    stmt->output(level + 4);
+    if (decl) {
+        decl->output(level + 4);
+    }
     stmt->output(level + 4);
 }

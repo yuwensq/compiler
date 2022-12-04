@@ -11,6 +11,7 @@ class SymbolEntry
 {
 private:
     int kind;
+    SymbolEntry* next;
 protected:
     enum {CONSTANT, VARIABLE, TEMPORARY};
     Type *type;
@@ -24,6 +25,8 @@ public:
     Type* getType() {return type;};
     void setType(Type *type) {this->type = type;};
     virtual std::string toStr() = 0;
+    SymbolEntry* getNext() const {return next;};
+    bool setNext(SymbolEntry* se);
     // You can add any function you need here.
 };
 
@@ -39,11 +42,15 @@ class ConstantSymbolEntry : public SymbolEntry
 {
 private:
     int value;
+    std::string strValue;
 
 public:
     ConstantSymbolEntry(Type *type, int value);
+    ConstantSymbolEntry(Type *type, std::string strValue);
+    ConstantSymbolEntry(Type *type);
     virtual ~ConstantSymbolEntry() {};
     int getValue() const {return value;};
+    std::string getStrValue() const{return strValue;};
     std::string toStr();
     // You can add any function you need here.
 };
@@ -77,6 +84,10 @@ private:
     enum {GLOBAL, PARAM, LOCAL};
     std::string name;
     int scope;
+    int value;
+    int label;
+    bool initial;
+
     Operand *addr;  // The address of the identifier.
     // You can add any field you need here.
 
@@ -90,6 +101,10 @@ public:
     int getScope() const {return scope;};
     void setAddr(Operand *addr) {this->addr = addr;};
     Operand* getAddr() {return addr;};
+    void setValue(int value);
+    int getValue() const { return value; };
+    int getLabel() const { return label; };
+    void setLabel() { label = SymbolTable::getLabel(); };
     // You can add any function you need here.
 };
 

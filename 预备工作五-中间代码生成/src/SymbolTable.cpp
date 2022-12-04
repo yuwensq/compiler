@@ -8,6 +8,25 @@ SymbolEntry::SymbolEntry(Type *type, int kind)
     this->kind = kind;
 }
 
+bool SymbolEntry::setNext(SymbolEntry* se) {
+    SymbolEntry* s = this;
+    long unsigned int cnt =
+        ((FunctionType*)(se->getType()))->getParamsType().size();
+    if (cnt == ((FunctionType*)(s->getType()))->getParamsType().size())
+        return false;
+    while (s->getNext()) {
+        if (cnt == ((FunctionType*)(s->getType()))->getParamsType().size())
+            return false;
+        s = s->getNext();
+    }
+    if (s == this) {
+        this->next = se;
+    } else {
+        s->setNext(se);
+    }
+    return true;
+}
+
 ConstantSymbolEntry::ConstantSymbolEntry(Type *type, int value) : SymbolEntry(type, SymbolEntry::CONSTANT)
 {
     this->value = value;
