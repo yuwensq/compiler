@@ -19,8 +19,6 @@
 DECIMIAL ([1-9][0-9]*|0)
 OCTAL (0[0-7]+)
 HEXADECIMAL (0[xX][0-9A-Fa-f]+)
-FLOATDEC ([0-9]*[.]?[0-9]*([Ee][+-]?[0-9]+)?)
-FLOATHEX (0[xX][0-9A-Fa-f]*[.]?[0-9A-Fa-f]*([Pp][+-]?[0-9]+)?)
 ID [[:alpha:]_][[:alpha:][:digit:]_]*
 STRING \".*\"
 EOL (\r\n|\n|\r)
@@ -351,14 +349,6 @@ LINECOMMENT \/\/[^\n]*
     SymbolEntry* se = new IdentifierSymbolEntry(funcType, yytext, globals->getLevel());
     globals->install(yytext, se);
     return ID;
-}
-{FLOATDEC} {
-    yylval.ftype =std::stof(yytext);
-    return FLOATNUM;
-}
-{FLOATHEX} {
-    yylval.ftype =std::stof(yytext);
-    return FLOATNUM;
 }
 {DECIMIAL} {
     if(dump_tokens)

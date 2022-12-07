@@ -318,7 +318,7 @@ void CallInstruction::output() const
         fprintf(yyout, "%s = ", operands[0]->toStr().c_str());
     }
     fprintf(yyout, "call %s %s(", ((FunctionType *)(func->getType()))->getRetType()->toStr().c_str(), func->toStr().c_str());
-    for (int i = 1; i < operands.size(); i++)
+    for (long unsigned int i = 1; i < operands.size(); i++)
     {
         if (i != 1)
         {

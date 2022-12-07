@@ -1,4 +1,5 @@
 #include "SymbolTable.h"
+#include "Type.h"
 #include <iostream>
 #include <sstream>
 

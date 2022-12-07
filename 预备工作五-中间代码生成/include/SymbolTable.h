@@ -36,6 +36,25 @@ public:
     // You can add any function you need here.
 };
 
+// symbol table managing identifier symbol entries
+class SymbolTable
+{
+private:
+    std::map<std::string, SymbolEntry *> symbolTable;
+    SymbolTable *prev;
+    int level;
+    static int counter;
+
+public:
+    SymbolTable();
+    SymbolTable(SymbolTable *prev);
+    void install(std::string name, SymbolEntry *entry);
+    SymbolEntry *lookup(std::string name, bool local = false);
+    SymbolTable *getPrev() { return prev; };
+    int getLevel() { return level; };
+    static int getLabel() { return counter++; };
+};
+
 /*
     Symbol entry for literal constant. Example:
 
@@ -147,24 +166,7 @@ public:
     // You can add any function you need here.
 };
 
-// symbol table managing identifier symbol entries
-class SymbolTable
-{
-private:
-    std::map<std::string, SymbolEntry *> symbolTable;
-    SymbolTable *prev;
-    int level;
-    static int counter;
 
-public:
-    SymbolTable();
-    SymbolTable(SymbolTable *prev);
-    void install(std::string name, SymbolEntry *entry);
-    SymbolEntry *lookup(std::string name, bool local = false);
-    SymbolTable *getPrev() { return prev; };
-    int getLevel() { return level; };
-    static int getLabel() { return counter++; };
-};
 
 extern SymbolTable *identifiers;
 extern SymbolTable *globals;
