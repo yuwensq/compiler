@@ -2,26 +2,31 @@
 #include <iostream>
 #include <sstream>
 
-SymbolEntry::SymbolEntry(Type *type, int kind) 
+SymbolEntry::SymbolEntry(Type *type, int kind)
 {
     this->type = type;
     this->kind = kind;
 }
 
-bool SymbolEntry::setNext(SymbolEntry* se) {
-    SymbolEntry* s = this;
+bool SymbolEntry::setNext(SymbolEntry *se)
+{
+    SymbolEntry *s = this;
     long unsigned int cnt =
-        ((FunctionType*)(se->getType()))->getParamsType().size();
-    if (cnt == ((FunctionType*)(s->getType()))->getParamsType().size())
+        ((FunctionType *)(se->getType()))->getParamsType().size();
+    if (cnt == ((FunctionType *)(s->getType()))->getParamsType().size())
         return false;
-    while (s->getNext()) {
-        if (cnt == ((FunctionType*)(s->getType()))->getParamsType().size())
+    while (s->getNext())
+    {
+        if (cnt == ((FunctionType *)(s->getType()))->getParamsType().size())
             return false;
         s = s->getNext();
     }
-    if (s == this) {
+    if (s == this)
+    {
         this->next = se;
-    } else {
+    }
+    else
+    {
         s->setNext(se);
     }
     return true;
@@ -43,6 +48,26 @@ IdentifierSymbolEntry::IdentifierSymbolEntry(Type *type, std::string name, int s
 {
     this->scope = scope;
     addr = nullptr;
+}
+
+void IdentifierSymbolEntry::setValue(int value)
+{
+    if (this->getType()->isInt() && ((IntType *)this->getType())->isConst())
+    {
+        if (!initial)
+        {
+            this->value = value;
+            initial = true;
+        }
+        else
+        {
+            exit(-1);
+        }
+    }
+    else
+    {
+        this->value = value;
+    }
 }
 
 std::string IdentifierSymbolEntry::toStr()
@@ -76,7 +101,7 @@ SymbolTable::SymbolTable(SymbolTable *prev)
 
 /*
     Description: lookup the symbol entry of an identifier in the symbol table
-    Parameters: 
+    Parameters:
         name: identifier name
     Return: pointer to the symbol entry of the identifier
 
@@ -87,14 +112,27 @@ SymbolTable::SymbolTable(SymbolTable *prev)
     4. If you find the entry, return it.
     5. If you can't find it in all symbol tables, return nullptr.
 */
-SymbolEntry* SymbolTable::lookup(std::string name)
+SymbolEntry *SymbolTable::lookup(std::string name, bool local)
 {
-    // Todo
+    SymbolTable *table = this;
+    while (table != nullptr)
+    {
+        if (table->symbolTable.find(name) != table->symbolTable.end())
+        {
+            return table->symbolTable[name];
+        }
+        table = table->prev;
+        if (local)
+        {
+            if (table == nullptr || table->getLevel() != 1)
+                break;
+        }
+    }
     return nullptr;
 }
 
 // install the entry into current symbol table.
-void SymbolTable::install(std::string name, SymbolEntry* entry)
+void SymbolTable::install(std::string name, SymbolEntry *entry)
 {
     symbolTable[name] = entry;
 }

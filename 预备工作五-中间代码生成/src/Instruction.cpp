@@ -3,7 +3,7 @@
 #include <iostream>
 #include "Function.h"
 #include "Type.h"
-extern FILE* yyout;
+extern FILE *yyout;
 
 Instruction::Instruction(unsigned instType, BasicBlock *insert_bb)
 {
@@ -52,6 +52,79 @@ Instruction *Instruction::getPrev()
     return prev;
 }
 
+AllocaInstruction::AllocaInstruction(Operand *dst, SymbolEntry *se, BasicBlock *insert_bb) : Instruction(ALLOCA, insert_bb)
+{
+    operands.push_back(dst);
+    dst->setDef(this);
+    this->se = se;
+}
+
+AllocaInstruction::~AllocaInstruction()
+{
+    operands[0]->setDef(nullptr);
+    if (operands[0]->usersNum() == 0)
+        delete operands[0];
+}
+
+void AllocaInstruction::output() const
+{
+    std::string dst, type;
+    dst = operands[0]->toStr();
+    type = se->getType()->toStr();
+    fprintf(yyout, "  %s = alloca %s, align 4\n", dst.c_str(), type.c_str());
+}
+
+LoadInstruction::LoadInstruction(Operand *dst, Operand *src_addr, BasicBlock *insert_bb) : Instruction(LOAD, insert_bb)
+{
+    operands.push_back(dst);
+    operands.push_back(src_addr);
+    dst->setDef(this);
+    src_addr->addUse(this);
+}
+
+LoadInstruction::~LoadInstruction()
+{
+    operands[0]->setDef(nullptr);
+    if (operands[0]->usersNum() == 0)
+        delete operands[0];
+    operands[1]->removeUse(this);
+}
+
+void LoadInstruction::output() const
+{
+    std::string dst = operands[0]->toStr();
+    std::string src = operands[1]->toStr();
+    std::string src_type;
+    std::string dst_type;
+    dst_type = operands[0]->getType()->toStr();
+    src_type = operands[1]->getType()->toStr();
+    fprintf(yyout, "  %s = load %s, %s %s, align 4\n", dst.c_str(), dst_type.c_str(), src_type.c_str(), src.c_str());
+}
+
+StoreInstruction::StoreInstruction(Operand *dst_addr, Operand *src, BasicBlock *insert_bb) : Instruction(STORE, insert_bb)
+{
+    operands.push_back(dst_addr);
+    operands.push_back(src);
+    dst_addr->addUse(this);
+    src->addUse(this);
+}
+
+StoreInstruction::~StoreInstruction()
+{
+    operands[0]->removeUse(this);
+    operands[1]->removeUse(this);
+}
+
+void StoreInstruction::output() const
+{
+    std::string dst = operands[0]->toStr();
+    std::string src = operands[1]->toStr();
+    std::string dst_type = operands[0]->getType()->toStr();
+    std::string src_type = operands[1]->getType()->toStr();
+
+    fprintf(yyout, "  store %s %s, %s %s, align 4\n", src_type.c_str(), src.c_str(), dst_type.c_str(), dst.c_str());
+}
+
 BinaryInstruction::BinaryInstruction(unsigned opcode, Operand *dst, Operand *src1, Operand *src2, BasicBlock *insert_bb) : Instruction(BINARY, insert_bb)
 {
     this->opcode = opcode;
@@ -66,7 +139,7 @@ BinaryInstruction::BinaryInstruction(unsigned opcode, Operand *dst, Operand *src
 BinaryInstruction::~BinaryInstruction()
 {
     operands[0]->setDef(nullptr);
-    if(operands[0]->usersNum() == 0)
+    if (operands[0]->usersNum() == 0)
         delete operands[0];
     operands[1]->removeUse(this);
     operands[2]->removeUse(this);
@@ -74,10 +147,10 @@ BinaryInstruction::~BinaryInstruction()
 
 void BinaryInstruction::output() const
 {
-    std::string s1, s2, s3, op, type;
-    s1 = operands[0]->toStr();
-    s2 = operands[1]->toStr();
-    s3 = operands[2]->toStr();
+    std::string dst, src1, src2, op, type;
+    dst = operands[0]->toStr();
+    src1 = operands[1]->toStr();
+    src2 = operands[2]->toStr();
     type = operands[0]->getType()->toStr();
     switch (opcode)
     {
@@ -87,13 +160,23 @@ void BinaryInstruction::output() const
     case SUB:
         op = "sub";
         break;
+    case MUL:
+        op = "mul";
+        break;
+    case DIV:
+        op = "sdiv";
+        break;
+    case MOD:
+        op = "srem";
+        break;
     default:
         break;
     }
-    fprintf(yyout, "  %s = %s %s %s, %s\n", s1.c_str(), op.c_str(), type.c_str(), s2.c_str(), s3.c_str());
+    fprintf(yyout, "  %s = %s %s %s, %s\n", dst.c_str(), op.c_str(), type.c_str(), src1.c_str(), src2.c_str());
 }
 
-CmpInstruction::CmpInstruction(unsigned opcode, Operand *dst, Operand *src1, Operand *src2, BasicBlock *insert_bb): Instruction(CMP, insert_bb){
+CmpInstruction::CmpInstruction(unsigned opcode, Operand *dst, Operand *src1, Operand *src2, BasicBlock *insert_bb) : Instruction(CMP, insert_bb)
+{
     this->opcode = opcode;
     operands.push_back(dst);
     operands.push_back(src1);
@@ -106,7 +189,7 @@ CmpInstruction::CmpInstruction(unsigned opcode, Operand *dst, Operand *src1, Ope
 CmpInstruction::~CmpInstruction()
 {
     operands[0]->setDef(nullptr);
-    if(operands[0]->usersNum() == 0)
+    if (operands[0]->usersNum() == 0)
         delete operands[0];
     operands[1]->removeUse(this);
     operands[2]->removeUse(this);
@@ -114,10 +197,10 @@ CmpInstruction::~CmpInstruction()
 
 void CmpInstruction::output() const
 {
-    std::string s1, s2, s3, op, type;
-    s1 = operands[0]->toStr();
-    s2 = operands[1]->toStr();
-    s3 = operands[2]->toStr();
+    std::string dst, src1, src2, op, type;
+    dst = operands[0]->toStr();
+    src1 = operands[1]->toStr();
+    src2 = operands[2]->toStr();
     type = operands[1]->getType()->toStr();
     switch (opcode)
     {
@@ -144,7 +227,7 @@ void CmpInstruction::output() const
         break;
     }
 
-    fprintf(yyout, "  %s = icmp %s %s %s, %s\n", s1.c_str(), op.c_str(), type.c_str(), s2.c_str(), s3.c_str());
+    fprintf(yyout, "  %s = icmp %s %s %s, %s\n", dst.c_str(), op.c_str(), type.c_str(), src1.c_str(), src2.c_str());
 }
 
 UncondBrInstruction::UncondBrInstruction(BasicBlock *to, BasicBlock *insert_bb) : Instruction(UNCOND, insert_bb)
@@ -167,7 +250,8 @@ BasicBlock *UncondBrInstruction::getBranch()
     return branch;
 }
 
-CondBrInstruction::CondBrInstruction(BasicBlock*true_branch, BasicBlock*false_branch, Operand *cond, BasicBlock *insert_bb) : Instruction(COND, insert_bb){
+CondBrInstruction::CondBrInstruction(BasicBlock *true_branch, BasicBlock *false_branch, Operand *cond, BasicBlock *insert_bb) : Instruction(COND, insert_bb)
+{
     this->true_branch = true_branch;
     this->false_branch = false_branch;
     cond->addUse(this);
@@ -209,9 +293,45 @@ BasicBlock *CondBrInstruction::getTrueBranch()
     return true_branch;
 }
 
+CallInstruction::CallInstruction(Operand *dst, SymbolEntry *func, std::vector<Operand *> params, BasicBlock *insert_bb) : Instruction(CALL, insert_bb)
+{
+    operands.push_back(dst);
+    if (dst != nullptr)
+    {
+        dst->setDef(this);
+    }
+    for (auto operand : params)
+    {
+        operands.push_back(operand);
+        operand->addUse(this);
+    }
+    this->func = func;
+}
+
+CallInstruction::~CallInstruction() {}
+
+void CallInstruction::output() const
+{
+    fprintf(yyout, "  ");
+    if (operands[0] != nullptr)
+    {
+        fprintf(yyout, "%s = ", operands[0]->toStr().c_str());
+    }
+    fprintf(yyout, "call %s %s(", ((FunctionType *)(func->getType()))->getRetType()->toStr().c_str(), func->toStr().c_str());
+    for (int i = 1; i < operands.size(); i++)
+    {
+        if (i != 1)
+        {
+            fprintf(yyout, ", ");
+        }
+        fprintf(yyout, "%s %s", operands[i]->getType()->toStr().c_str(), operands[i]->toStr().c_str());
+    }
+    fprintf(yyout, ")\n");
+}
+
 RetInstruction::RetInstruction(Operand *src, BasicBlock *insert_bb) : Instruction(RET, insert_bb)
 {
-    if(src != nullptr)
+    if (src != nullptr)
     {
         operands.push_back(src);
         src->addUse(this);
@@ -220,13 +340,13 @@ RetInstruction::RetInstruction(Operand *src, BasicBlock *insert_bb) : Instructio
 
 RetInstruction::~RetInstruction()
 {
-    if(!operands.empty())
+    if (!operands.empty())
         operands[0]->removeUse(this);
 }
 
 void RetInstruction::output() const
 {
-    if(operands.empty())
+    if (operands.empty())
     {
         fprintf(yyout, "  ret void\n");
     }
@@ -239,75 +359,43 @@ void RetInstruction::output() const
     }
 }
 
-AllocaInstruction::AllocaInstruction(Operand *dst, SymbolEntry *se, BasicBlock *insert_bb) : Instruction(ALLOCA, insert_bb)
+XorInstruction::XorInstruction(Operand *dst, Operand *src, BasicBlock *insert_bb) : Instruction(XOR, insert_bb)
 {
-    operands.push_back(dst);
     dst->setDef(this);
-    this->se = se;
-}
-
-AllocaInstruction::~AllocaInstruction()
-{
-    operands[0]->setDef(nullptr);
-    if(operands[0]->usersNum() == 0)
-        delete operands[0];
-}
-
-void AllocaInstruction::output() const
-{
-    std::string dst, type;
-    dst = operands[0]->toStr();
-    type = se->getType()->toStr();
-    fprintf(yyout, "  %s = alloca %s, align 4\n", dst.c_str(), type.c_str());
-}
-
-LoadInstruction::LoadInstruction(Operand *dst, Operand *src_addr, BasicBlock *insert_bb) : Instruction(LOAD, insert_bb)
-{
-    operands.push_back(dst);
-    operands.push_back(src_addr);
-    dst->setDef(this);
-    src_addr->addUse(this);
-}
-
-LoadInstruction::~LoadInstruction()
-{
-    operands[0]->setDef(nullptr);
-    if(operands[0]->usersNum() == 0)
-        delete operands[0];
-    operands[1]->removeUse(this);
-}
-
-void LoadInstruction::output() const
-{
-    std::string dst = operands[0]->toStr();
-    std::string src = operands[1]->toStr();
-    std::string src_type;
-    std::string dst_type;
-    dst_type = operands[0]->getType()->toStr();
-    src_type = operands[1]->getType()->toStr();
-    fprintf(yyout, "  %s = load %s, %s %s, align 4\n", dst.c_str(), dst_type.c_str(), src_type.c_str(), src.c_str());
-}
-
-StoreInstruction::StoreInstruction(Operand *dst_addr, Operand *src, BasicBlock *insert_bb) : Instruction(STORE, insert_bb)
-{
-    operands.push_back(dst_addr);
-    operands.push_back(src);
-    dst_addr->addUse(this);
     src->addUse(this);
+    operands.push_back(dst);
+    operands.push_back(src);
 }
 
-StoreInstruction::~StoreInstruction()
+void XorInstruction::output() const
 {
-    operands[0]->removeUse(this);
-    operands[1]->removeUse(this);
+    std::string dst, src;
+    dst = operands[0]->toStr();
+    src = operands[1]->toStr();
+    fprintf(yyout, "  %s = xor i1 %s, true\n", dst.c_str(), src.c_str());
 }
 
-void StoreInstruction::output() const
+ZextInstruction::ZextInstruction(Operand *dst, Operand *src, bool b2i, BasicBlock *insert_bb) : Instruction(ZEXT, insert_bb)
 {
-    std::string dst = operands[0]->toStr();
-    std::string src = operands[1]->toStr();
-    std::string dst_type = operands[0]->getType()->toStr();
-    std::string src_type = operands[1]->getType()->toStr();
+    this->b2i = b2i;
+    dst->setDef(this);
+    src->addUse(this);
+    operands.push_back(dst);
+    operands.push_back(src);
+}
 
-    fprintf(yyout, "  store %s %s, %s %s, align 4\n", src_type.c_str(), src.c_str(), dst_type.c_str(), dst.c_str());
+void ZextInstruction::output() const
+{
+    std::string dst, src;
+    dst = operands[0]->toStr();
+    src = operands[1]->toStr();
+    if (b2i)
+    {
+        fprintf(yyout, "  %s = zext i1 %s to i32\n", dst.c_str(), src.c_str());
+    }
+    else
+    {
+
+        fprintf(yyout, "  %s = zext i32 %s to i1\n", dst.c_str(), src.c_str());
+    }
 }

@@ -7,30 +7,40 @@ class Type
 {
 private:
     int kind;
+
 protected:
-    enum {INT, VOID, FUNC, PTR,STRING};
+    enum
+    {
+        INT,
+        VOID,
+        FUNC,
+        PTR,
+        STRING
+    };
     int size;
+
 public:
-    Type(int kind,int size=0) : kind(kind),size(size) {};
-    virtual ~Type() {};
+    Type(int kind, int size = 0) : kind(kind), size(size){};
+    virtual ~Type(){};
     virtual std::string toStr() = 0;
-    bool isInt() const {return kind == INT;};
-    bool isVoid() const {return kind == VOID;};
-    bool isFunc() const {return kind == FUNC;};
-    bool isPtr() const {return kind==PTR;};
-    bool isString() const {return kind==STRING;};
-    int getKind() const {return kind;};
-    int getSize() const {return size;};
+    bool isInt() const { return kind == INT; };
+    bool isVoid() const { return kind == VOID; };
+    bool isFunc() const { return kind == FUNC; };
+    bool isPtr() const { return kind == PTR; };
+    bool isString() const { return kind == STRING; };
+    int getKind() const { return kind; };
+    int getSize() const { return size; };
 };
 
 class IntType : public Type
 {
 private:
     bool constant;
+
 public:
-    IntType(int size,bool constant=false) : Type(Type::INT,size),constant(constant) {};
+    IntType(int size, bool constant = false) : Type(Type::INT, size), constant(constant){};
     std::string toStr();
-    bool isConst() const {return constant;};
+    bool isConst() const { return constant; };
 };
 
 class VoidType : public Type
@@ -44,16 +54,16 @@ class FunctionType : public Type
 {
 private:
     Type *returnType;
-    std::vector<Type*> paramsType;
+    std::vector<Type *> paramsType;
+
 public:
-    FunctionType(Type* returnType, std::vector<Type*> paramsType) : 
-    Type(Type::FUNC), returnType(returnType), paramsType(paramsType){};
-    Type* getRetType() {return returnType;};
+    FunctionType(Type *returnType, std::vector<Type *> paramsType) : Type(Type::FUNC), returnType(returnType), paramsType(paramsType){};
+    Type *getRetType() { return returnType; };
     void setParamsType(std::vector<Type *> paramsType)
     {
         this->paramsType = paramsType;
     };
-    std::vector<Type*> getParamsType() { return paramsType; };
+    std::vector<Type *> getParamsType() { return paramsType; };
     std::string toStr();
 };
 
@@ -61,16 +71,19 @@ class PointerType : public Type
 {
 private:
     Type *valueType;
+
 public:
-    PointerType(Type* valueType) : Type(Type::PTR) {this->valueType = valueType;};
+    PointerType(Type *valueType) : Type(Type::PTR) { this->valueType = valueType; };
     std::string toStr();
-    Type* getType() const {return valueType;};
+    Type *getType() const { return valueType; };
 };
 
-class StringType : public Type {
-   private:
+class StringType : public Type
+{
+private:
     int length;
-   public:
+
+public:
     StringType(int length) : Type(Type::STRING), length(length){};
     int getLength() const { return length; };
     std::string toStr();
@@ -83,6 +96,7 @@ private:
     static IntType commonBool;
     static VoidType commonVoid;
     static IntType commonConstInt;
+
 public:
     static Type *intType;
     static Type *voidType;

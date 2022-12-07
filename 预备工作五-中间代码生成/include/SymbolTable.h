@@ -11,27 +11,32 @@ class SymbolEntry
 {
 private:
     int kind;
-    SymbolEntry* next;
+    SymbolEntry *next;
+
 protected:
-    enum {CONSTANT, VARIABLE, TEMPORARY};
+    enum
+    {
+        CONSTANT,
+        VARIABLE,
+        TEMPORARY
+    };
     Type *type;
 
 public:
     SymbolEntry(Type *type, int kind);
-    virtual ~SymbolEntry() {};
-    bool isConstant() const {return kind == CONSTANT;};
-    bool isTemporary() const {return kind == TEMPORARY;};
-    bool isVariable() const {return kind == VARIABLE;};
-    Type* getType() {return type;};
-    void setType(Type *type) {this->type = type;};
+    virtual ~SymbolEntry(){};
+    bool isConstant() const { return kind == CONSTANT; };
+    bool isTemporary() const { return kind == TEMPORARY; };
+    bool isVariable() const { return kind == VARIABLE; };
+    Type *getType() { return type; };
+    void setType(Type *type) { this->type = type; };
     virtual std::string toStr() = 0;
-    SymbolEntry* getNext() const {return next;};
-    bool setNext(SymbolEntry* se);
+    SymbolEntry *getNext() const { return next; };
+    bool setNext(SymbolEntry *se);
     // You can add any function you need here.
 };
 
-
-/*  
+/*
     Symbol entry for literal constant. Example:
 
     int a = 1;
@@ -48,15 +53,14 @@ public:
     ConstantSymbolEntry(Type *type, int value);
     ConstantSymbolEntry(Type *type, std::string strValue);
     ConstantSymbolEntry(Type *type);
-    virtual ~ConstantSymbolEntry() {};
-    int getValue() const {return value;};
-    std::string getStrValue() const{return strValue;};
+    virtual ~ConstantSymbolEntry(){};
+    int getValue() const { return value; };
+    std::string getStrValue() const { return strValue; };
     std::string toStr();
     // You can add any function you need here.
 };
 
-
-/* 
+/*
     Symbol entry for identifier. Example:
 
     int a;
@@ -81,26 +85,30 @@ public:
 class IdentifierSymbolEntry : public SymbolEntry
 {
 private:
-    enum {GLOBAL, PARAM, LOCAL};
+    enum
+    {
+        GLOBAL,
+        PARAM,
+        LOCAL
+    };
     std::string name;
     int scope;
     int value;
     int label;
     bool initial;
 
-    Operand *addr;  // The address of the identifier.
+    Operand *addr; // The address of the identifier.
     // You can add any field you need here.
 
 public:
     IdentifierSymbolEntry(Type *type, std::string name, int scope);
-    virtual ~IdentifierSymbolEntry() {};
+    virtual ~IdentifierSymbolEntry(){};
     std::string toStr();
-    bool isGlobal() const {return scope == GLOBAL;};
-    bool isParam() const {return scope == PARAM;};
-    bool isLocal() const {return scope >= LOCAL;};
-    int getScope() const {return scope;};
-    void setAddr(Operand *addr) {this->addr = addr;};
-    Operand* getAddr() {return addr;};
+    bool isGlobal() const { return scope == GLOBAL; };
+    bool isParam() const { return scope == PARAM; };
+    bool isLocal() const { return scope >= LOCAL; };
+    int getScope() const { return scope; };
+    Operand *getAddr() { return addr; };
     void setValue(int value);
     int getValue() const { return value; };
     int getLabel() const { return label; };
@@ -108,8 +116,7 @@ public:
     // You can add any function you need here.
 };
 
-
-/* 
+/*
     Symbol entry for temporary variable created by compiler. Example:
 
     int a;
@@ -131,11 +138,12 @@ class TemporarySymbolEntry : public SymbolEntry
 {
 private:
     int label;
+
 public:
     TemporarySymbolEntry(Type *type, int label);
-    virtual ~TemporarySymbolEntry() {};
+    virtual ~TemporarySymbolEntry(){};
     std::string toStr();
-    int getLabel() const {return label;};
+    int getLabel() const { return label; };
     // You can add any function you need here.
 };
 
@@ -143,18 +151,19 @@ public:
 class SymbolTable
 {
 private:
-    std::map<std::string, SymbolEntry*> symbolTable;
+    std::map<std::string, SymbolEntry *> symbolTable;
     SymbolTable *prev;
     int level;
     static int counter;
+
 public:
     SymbolTable();
     SymbolTable(SymbolTable *prev);
-    void install(std::string name, SymbolEntry* entry);
-    SymbolEntry* lookup(std::string name);
-    SymbolTable* getPrev() {return prev;};
-    int getLevel() {return level;};
-    static int getLabel() {return counter++;};
+    void install(std::string name, SymbolEntry *entry);
+    SymbolEntry *lookup(std::string name, bool local = false);
+    SymbolTable *getPrev() { return prev; };
+    int getLevel() { return level; };
+    static int getLabel() { return counter++; };
 };
 
 extern SymbolTable *identifiers;
