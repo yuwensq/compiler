@@ -3,7 +3,7 @@
 #include "Type.h"
 #include <list>
 
-extern FILE* yyout;
+extern FILE *yyout;
 
 Function::Function(Unit *u, SymbolEntry *s)
 {
@@ -13,13 +13,13 @@ Function::Function(Unit *u, SymbolEntry *s)
     parent = u;
 }
 
-Function::~Function()
-{
-    auto delete_list = block_list;
-    for (auto &i : delete_list)
-        delete i;
-    parent->removeFunc(this);
-}
+// Function::~Function()
+// {
+//     auto delete_list = block_list;
+//     for (auto &i : delete_list)
+//         delete i;
+//     parent->removeFunc(this);
+// }
 
 // remove the basicblock bb from its block_list.
 void Function::remove(BasicBlock *bb)
@@ -29,7 +29,7 @@ void Function::remove(BasicBlock *bb)
 
 void Function::output() const
 {
-    FunctionType* funcType = dynamic_cast<FunctionType*>(sym_ptr->getType());
+    FunctionType *funcType = dynamic_cast<FunctionType *>(sym_ptr->getType());
     Type *retType = funcType->getRetType();
     fprintf(yyout, "define %s %s() {\n", retType->toStr().c_str(), sym_ptr->toStr().c_str());
     std::set<BasicBlock *> v;
