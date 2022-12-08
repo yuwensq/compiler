@@ -32,9 +32,9 @@ public:
     Node();
     int getSeq() const { return seq; };
     static void setIRBuilder(IRBuilder *ib) { builder = ib; };
-    void output(int level){};
-    void typeCheck(){};
-    void genCode(){};
+    virtual void output(int level) = 0;
+    virtual void typeCheck() = 0;
+    virtual void genCode() = 0;
     std::vector<Instruction *> &trueList() { return true_list; }
     std::vector<Instruction *> &falseList() { return false_list; }
     void setNext(Node *node);
@@ -156,6 +156,7 @@ class Id : public ExprNode
 public:
     Id(SymbolEntry *se) : ExprNode(se)
     {
+        this->type = se->getType();
         SymbolEntry *temp = new TemporarySymbolEntry(se->getType(), SymbolTable::getLabel());
         dst = new Operand(temp);
     };

@@ -58,10 +58,11 @@ int main(int argc, char *argv[])
         exit(EXIT_FAILURE);
     }
     yyparse();
+    dump_ast = true;
     if(dump_ast)
         ast.output();
-    ast.typeCheck();
-    ast.genCode(&unit);
+    // ast.typeCheck();
+    // ast.genCode(&unit);
     if(dump_ir)
         unit.output();
     return 0;

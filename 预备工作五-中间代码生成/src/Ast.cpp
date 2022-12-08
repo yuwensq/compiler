@@ -786,6 +786,10 @@ void DeclStmt::output(int level)
     {
         expr->output(level + 4);
     }
+    if (this->getNext())
+    {
+        ((DeclStmt*)getNext())->output(level);
+    }
 }
 
 void BlankStmt::output(int level)
@@ -827,7 +831,6 @@ void ContinueStmt::output(int level)
 void ReturnStmt::output(int level)
 {
     fprintf(yyout, "%*cReturnStmt\n", level, ' ');
-    retValue->output(level + 4);
     if (retValue != nullptr)
     {
         retValue->output(level + 4);
@@ -841,6 +844,12 @@ void AssignStmt::output(int level)
     expr->output(level + 4);
 }
 
+void ExprStmt::output(int level)
+{
+    fprintf(yyout, "%*cExprStmt\n", level, ' ');
+    expr->output(level + 4);
+}
+
 void FunctionDef::output(int level)
 {
     std::string name, type;
@@ -848,7 +857,6 @@ void FunctionDef::output(int level)
     type = se->getType()->toStr();
     fprintf(yyout, "%*cFunctionDefine function name: %s, type: %s\n", level, ' ',
             name.c_str(), type.c_str());
-    stmt->output(level + 4);
     if (decl)
     {
         decl->output(level + 4);
