@@ -38,6 +38,15 @@ ConstantSymbolEntry::ConstantSymbolEntry(Type *type, int value) : SymbolEntry(ty
     this->value = value;
 }
 
+ConstantSymbolEntry::ConstantSymbolEntry(Type *type, std::string value) : SymbolEntry(type, SymbolEntry::CONSTANT)
+{
+    this->strValue = value;
+}
+
+ConstantSymbolEntry::ConstantSymbolEntry(Type *type) : SymbolEntry(type, SymbolEntry::CONSTANT)
+{
+}
+
 std::string ConstantSymbolEntry::toStr()
 {
     std::ostringstream buffer;

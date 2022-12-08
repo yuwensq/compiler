@@ -378,7 +378,7 @@ FuncDef
         std::vector<Type*> vec;
         DeclStmt* temp = (DeclStmt*)$5;
         while(temp){
-            vec.push_back(temp->getId()->getSymbolEntry()->getType());
+            vec.push_back(temp->getId()->getSymPtr()->getType());
             temp = (DeclStmt*)(temp->getNext());
         }
         funcType = new FunctionType($1, vec);

@@ -35,12 +35,6 @@ LINECOMMENT \/\/[^\n]*
     chars += strlen("int");
     return INT;
 }
-"float" {
-    if(dump_tokens)
-        DEBUG_FOR_LAB4("FLOAT\tfloat");
-    chars += strlen("float");
-    return FLOAT;
-}
 "void" {
     if(dump_tokens)
         DEBUG_FOR_LAB4("VOID\tvoid");
@@ -251,33 +245,6 @@ LINECOMMENT \/\/[^\n]*
     yylval.strtype = lexeme;
     std::vector<Type*> vec;
     Type* funcType = new FunctionType(TypeSystem::intType, vec);
-    SymbolEntry* se = new IdentifierSymbolEntry(funcType, yytext, globals->getLevel());
-    globals->install(yytext, se);
-    return ID;
-}
-"putfloat" {
-     if(dump_tokens)
-        DEBUG_FOR_LAB4(yytext);
-    char *lexeme;
-    lexeme = new char[strlen(yytext) + 1];
-    strcpy(lexeme, yytext);
-    yylval.strtype = lexeme;
-    std::vector<Type*> vec;
-    vec.push_back(TypeSystem::floatType);
-    Type* funcType = new FunctionType(TypeSystem::voidType, vec);
-    SymbolEntry* se = new IdentifierSymbolEntry(funcType, yytext, globals->getLevel());
-    globals->install(yytext, se);
-    return ID;
-}
-"getfloat" {
-    if(dump_tokens)
-        DEBUG_FOR_LAB4(yytext);
-    char *lexeme;
-    lexeme = new char[strlen(yytext) + 1];
-    strcpy(lexeme, yytext);
-    yylval.strtype = lexeme;
-    std::vector<Type*> vec;
-    Type* funcType = new FunctionType(TypeSystem::floatType, vec);
     SymbolEntry* se = new IdentifierSymbolEntry(funcType, yytext, globals->getLevel());
     globals->install(yytext, se);
     return ID;

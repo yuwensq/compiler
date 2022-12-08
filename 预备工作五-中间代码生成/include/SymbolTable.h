@@ -127,6 +127,7 @@ public:
     bool isParam() const { return scope == PARAM; };
     bool isLocal() const { return scope >= LOCAL; };
     int getScope() const { return scope; };
+    void setAddr(Operand *addr) { this->addr = addr; };
     Operand *getAddr() { return addr; };
     void setValue(int value);
     int getValue() const { return value; };
@@ -165,8 +166,6 @@ public:
     int getLabel() const { return label; };
     // You can add any function you need here.
 };
-
-
 
 extern SymbolTable *identifiers;
 extern SymbolTable *globals;
