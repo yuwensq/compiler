@@ -112,14 +112,17 @@ BlockStmt
     ;
 IfStmt
     : IF LPAREN Cond RPAREN Stmt %prec THEN {
+        ((ExprNode*)$3)->setIsCond(true);
         $$ = new IfStmt($3, $5);
     }
     | IF LPAREN Cond RPAREN Stmt ELSE Stmt {
+        ((ExprNode*)$3)->setIsCond(true);
         $$ = new IfElseStmt($3, $5, $7);
     }
     ;
 WhileStmt
     : WHILE LPAREN Cond RPAREN {
+        ((ExprNode*)$3)->setIsCond(true);
         StmtNode *whileStmt = new WhileStmt($3);
         whileStack.push(whileStmt);
     } Stmt {
@@ -199,10 +202,12 @@ UnaryExp
     }
     | ADD UnaryExp {$$ = $2;}
     | SUB UnaryExp {
-        $$ = new UnaryExpr(nullptr, UnaryExpr::SUB, $2);
+        SymbolEntry* se = new TemporarySymbolEntry(TypeSystem::intType, SymbolTable::getLabel());
+        $$ = new UnaryExpr(se, UnaryExpr::SUB, $2);
     }
     | NOT UnaryExp {
-        $$ = new UnaryExpr(nullptr, UnaryExpr::NOT, $2);
+        SymbolEntry* se = new TemporarySymbolEntry(TypeSystem::boolType, SymbolTable::getLabel());
+        $$ = new UnaryExpr(se, UnaryExpr::NOT, $2);
     }
     ;
 MulExp

@@ -11,9 +11,14 @@ class Unit
 
 private:
     std::vector<Function *> func_list;
+    // 全局变量
+    std::vector<SymbolEntry *> global_vars;
+    // 运行时函数
+    std::vector<SymbolEntry *> declare_list;
+
 public:
     Unit() = default;
-    ~Unit() ;
+    ~Unit();
     void insertFunc(Function *);
     void removeFunc(Function *);
     void output() const;
@@ -21,6 +26,14 @@ public:
     iterator end() { return func_list.end(); };
     reverse_iterator rbegin() { return func_list.rbegin(); };
     reverse_iterator rend() { return func_list.rend(); };
+    void addGlobalVar(SymbolEntry *se) { global_vars.push_back(se); };
+    void insertDeclare(SymbolEntry *se)
+    {
+        if (std::find(declare_list.begin(), declare_list.end(), se) == declare_list.end())
+        {
+            declare_list.push_back(se);
+        }
+    };
 };
 
 #endif

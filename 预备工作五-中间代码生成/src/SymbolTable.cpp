@@ -12,8 +12,7 @@ SymbolEntry::SymbolEntry(Type *type, int kind)
 bool SymbolEntry::setNext(SymbolEntry *se)
 {
     SymbolEntry *s = this;
-    long unsigned int cnt =
-        ((FunctionType *)(se->getType()))->getParamsType().size();
+    long unsigned int cnt = ((FunctionType *)(se->getType()))->getParamsType().size();
     if (cnt == ((FunctionType *)(s->getType()))->getParamsType().size())
         return false;
     while (s->getNext())
@@ -22,14 +21,7 @@ bool SymbolEntry::setNext(SymbolEntry *se)
             return false;
         s = s->getNext();
     }
-    if (s == this)
-    {
-        this->next = se;
-    }
-    else
-    {
-        s->setNext(se);
-    }
+    s->next = se;
     return true;
 }
 
@@ -54,7 +46,7 @@ std::string ConstantSymbolEntry::toStr()
     return buffer.str();
 }
 
-IdentifierSymbolEntry::IdentifierSymbolEntry(Type *type, std::string name, int scope) : SymbolEntry(type, SymbolEntry::VARIABLE), name(name)
+IdentifierSymbolEntry::IdentifierSymbolEntry(Type *type, std::string name, int scope, bool sysy) : SymbolEntry(type, SymbolEntry::VARIABLE), name(name), sysy(sysy)
 {
     this->scope = scope;
     addr = nullptr;
@@ -144,6 +136,19 @@ SymbolEntry *SymbolTable::lookup(std::string name, bool local)
 // install the entry into current symbol table.
 void SymbolTable::install(std::string name, SymbolEntry *entry)
 {
+    // 如果是函数，要检查重定义
+    if (entry->getType()->isFunc())
+    {
+        if (this->symbolTable.find(name) != this->symbolTable.end())
+        {
+            SymbolEntry *se = this->symbolTable[name];
+            if (se->getType()->isFunc())
+            {
+                se->setNext(entry);
+                return;
+            }
+        }
+    }
     symbolTable[name] = entry;
 }
 

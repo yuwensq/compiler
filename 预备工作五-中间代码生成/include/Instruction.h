@@ -15,6 +15,7 @@ public:
     BasicBlock *getParent();
     bool isUncond() const { return instType == UNCOND; };
     bool isCond() const { return instType == COND; };
+    bool isRet() const { return instType == RET; };
     void setParent(BasicBlock *);
     void setNext(Instruction *);
     void setPrev(Instruction *);
@@ -176,6 +177,7 @@ class ZextInstruction : public Instruction
 public:
     ZextInstruction(Operand *dst, Operand *src, bool b2i = false, BasicBlock *insert_bb = nullptr);
     void output() const;
+
 private:
     bool b2i;
 };

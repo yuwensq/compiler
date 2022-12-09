@@ -231,7 +231,7 @@ LINECOMMENT \/\/[^\n]*
     std::vector<Type*> vec;
     vec.push_back(TypeSystem::intType);
     Type* funcType = new FunctionType(TypeSystem::voidType, vec);
-    SymbolEntry* se = new IdentifierSymbolEntry(funcType, yytext, globals->getLevel());
+    SymbolEntry* se = new IdentifierSymbolEntry(funcType, yytext, globals->getLevel(), true);
     globals->install(yytext, se);
     return ID;
 }
@@ -245,7 +245,7 @@ LINECOMMENT \/\/[^\n]*
     yylval.strtype = lexeme;
     std::vector<Type*> vec;
     Type* funcType = new FunctionType(TypeSystem::intType, vec);
-    SymbolEntry* se = new IdentifierSymbolEntry(funcType, yytext, globals->getLevel());
+    SymbolEntry* se = new IdentifierSymbolEntry(funcType, yytext, globals->getLevel(), true);
     globals->install(yytext, se);
     return ID;
 }
@@ -259,7 +259,7 @@ LINECOMMENT \/\/[^\n]*
     std::vector<Type*> vec;
     vec.push_back(TypeSystem::intType);
     Type* funcType = new FunctionType(TypeSystem::voidType, vec);
-    SymbolEntry* se = new IdentifierSymbolEntry(funcType, yytext, globals->getLevel());
+    SymbolEntry* se = new IdentifierSymbolEntry(funcType, yytext, globals->getLevel(), true);
     globals->install(yytext, se);
     return ID;
 }
@@ -272,7 +272,7 @@ LINECOMMENT \/\/[^\n]*
     yylval.strtype = lexeme;
     std::vector<Type*> vec;
     Type* funcType = new FunctionType(TypeSystem::intType, vec);
-    SymbolEntry* se = new IdentifierSymbolEntry(funcType, yytext, globals->getLevel());
+    SymbolEntry* se = new IdentifierSymbolEntry(funcType, yytext, globals->getLevel(), true);
     globals->install(yytext, se);
     return ID;
 }
@@ -287,7 +287,7 @@ LINECOMMENT \/\/[^\n]*
     StringType* str = new StringType(0);
     vec.push_back(str);
     Type* funcType = new FunctionType(TypeSystem::voidType, vec);
-    SymbolEntry* se = new IdentifierSymbolEntry(funcType, yytext, globals->getLevel());
+    SymbolEntry* se = new IdentifierSymbolEntry(funcType, yytext, globals->getLevel(), true);
     globals->install(yytext, se);
     return ID;
 }
@@ -300,7 +300,7 @@ LINECOMMENT \/\/[^\n]*
     yylval.strtype = lexeme;
     std::vector<Type*> vec;
     Type* funcType = new FunctionType(TypeSystem::voidType, vec);
-    SymbolEntry* se = new IdentifierSymbolEntry(funcType, yytext, globals->getLevel());
+    SymbolEntry* se = new IdentifierSymbolEntry(funcType, yytext, globals->getLevel(), true);
     globals->install(yytext, se);
     return ID;
 }
@@ -313,7 +313,7 @@ LINECOMMENT \/\/[^\n]*
     yylval.strtype = lexeme;
     std::vector<Type*> vec;
     Type* funcType = new FunctionType(TypeSystem::voidType, vec);
-    SymbolEntry* se = new IdentifierSymbolEntry(funcType, yytext, globals->getLevel());
+    SymbolEntry* se = new IdentifierSymbolEntry(funcType, yytext, globals->getLevel(), true);
     globals->install(yytext, se);
     return ID;
 }

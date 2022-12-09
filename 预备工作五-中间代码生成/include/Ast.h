@@ -47,6 +47,7 @@ private:
     int kind;
 
 protected:
+    bool isCond;
     SymbolEntry *symbolEntry;
     Operand *dst; // The result of the subtree is stored into dst.
     enum
@@ -59,13 +60,15 @@ protected:
     Type *type;
 
 public:
-    ExprNode(SymbolEntry *symbolEntry, int Kind = EXPR) : symbolEntry(symbolEntry), kind(kind){};
+    ExprNode(SymbolEntry *symbolEntry, int Kind = EXPR) : symbolEntry(symbolEntry), kind(kind), isCond(false){};
     Operand *getOperand() { return dst; };
     SymbolEntry *getSymPtr() { return symbolEntry; };
     bool isExpr() const { return kind == EXPR; };
     bool isInitValueListExpr() const { return kind == INITVALUELISTEXPR; };
     bool isImplictCastExpr() const { return kind == IMPLICTCASTEXPR; };
     bool isUnaryExpr() const { return kind == UNARYEXPR; };
+    bool isConde() const { return isCond; };
+    void setIsCond(bool isCond) { this->isCond = isCond; };
     void output(int level);
     void genCode(){};
     void typeCheck(){};

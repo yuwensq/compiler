@@ -12,6 +12,7 @@ protected:
     enum
     {
         INT,
+        BOOL,
         VOID,
         FUNC,
         PTR,
@@ -24,6 +25,7 @@ public:
     virtual ~Type(){};
     virtual std::string toStr() = 0;
     bool isInt() const { return kind == INT; };
+    bool isBool() const { return kind == BOOL; };
     bool isVoid() const { return kind == VOID; };
     bool isFunc() const { return kind == FUNC; };
     bool isPtr() const { return kind == PTR; };
@@ -38,7 +40,7 @@ private:
     bool constant;
 
 public:
-    IntType(int size, bool constant = false) : Type(Type::INT, size), constant(constant){};
+    IntType(int size, bool constant = false) : Type(size == 1 ? Type::BOOL : Type::INT, size), constant(constant){};
     std::string toStr();
     bool isConst() const { return constant; };
 };
