@@ -118,6 +118,7 @@ private:
     bool sysy;
 
     Operand *addr; // The address of the identifier.
+    Operand *argAddr;
     // You can add any field you need here.
 
 public:
@@ -131,6 +132,7 @@ public:
     int getScope() const { return scope; };
     void setAddr(Operand *addr) { this->addr = addr; };
     Operand *getAddr() { return addr; };
+    Operand *getArgAddr() { return argAddr; }
     void setValue(int value);
     int getValue() const { return value; };
     int getLabel() const { return label; };

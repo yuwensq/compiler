@@ -60,7 +60,7 @@ protected:
     Type *type;
 
 public:
-    ExprNode(SymbolEntry *symbolEntry, int Kind = EXPR) : symbolEntry(symbolEntry), kind(kind), isCond(false){};
+    ExprNode(SymbolEntry *symbolEntry, int kind = EXPR) : symbolEntry(symbolEntry), kind(kind), isCond(false){};
     Operand *getOperand() { return dst; };
     SymbolEntry *getSymPtr() { return symbolEntry; };
     bool isExpr() const { return kind == EXPR; };
@@ -169,23 +169,23 @@ public:
     int getValue();
 };
 
-class ImplicitValueInitExpr : public ExprNode
-{
-public:
-    ImplicitValueInitExpr(SymbolEntry *se) : ExprNode(se){};
-    void output(int level);
-};
-
+// 这个用来bool转int和int转bool
 class ImplictCastExpr : public ExprNode
 {
 private:
     ExprNode *expr;
+    bool b2i; // true为bool转int，false为int转bool
 
 public:
-    ImplictCastExpr(ExprNode *expr) : ExprNode(nullptr, IMPLICTCASTEXPR), expr(expr)
+    ImplictCastExpr(ExprNode *expr, bool b2i = false) : ExprNode(nullptr, IMPLICTCASTEXPR), expr(expr), b2i(b2i)
     {
-        type = TypeSystem::boolType;
+        type = b2i ? TypeSystem::intType : TypeSystem::boolType;
         dst = new Operand(new TemporarySymbolEntry(type, SymbolTable::getLabel()));
+        if (expr->isConde())
+        {
+            expr->setIsCond(false);
+            this->isCond = true;
+        }
     };
     void output(int level);
     ExprNode *getExpr() const { return expr; };

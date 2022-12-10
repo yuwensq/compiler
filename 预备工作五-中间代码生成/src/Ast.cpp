@@ -91,17 +91,24 @@ BinaryExpr::BinaryExpr(SymbolEntry *se, int op, ExprNode *expr1, ExprNode *expr2
         // 对于AND和OR逻辑运算，如果操作数表达式为int型，需要进行隐式转换，将int型转为bool型。
         if (op == BinaryExpr::AND || op == BinaryExpr::OR)
         {
-            if (expr1->getType()->isInt() &&
-                expr1->getType()->getSize() == 32)
+            if (expr1->getType()->isInt())
             {
-                ImplictCastExpr *temp = new ImplictCastExpr(expr1);
-                this->expr1 = temp;
+                this->expr1 = new ImplictCastExpr(expr1);
             }
-            if (expr2->getType()->isInt() &&
-                expr2->getType()->getSize() == 32)
+            if (expr2->getType()->isInt())
             {
-                ImplictCastExpr *temp = new ImplictCastExpr(expr2);
-                this->expr2 = temp;
+                this->expr2 = new ImplictCastExpr(expr2);
+            }
+        }
+        else
+        {
+            if (expr1->getType()->isBool())
+            {
+                this->expr1 = new ImplictCastExpr(expr1, true);
+            }
+            if (expr2->getType()->isBool())
+            {
+                this->expr2 = new ImplictCastExpr(expr2, true);
             }
         }
     }
@@ -179,10 +186,18 @@ UnaryExpr::UnaryExpr(SymbolEntry *se, int op, ExprNode *expr) : ExprNode(se, UNA
     if (op == UnaryExpr::NOT)
     {
         type = TypeSystem::boolType;
+        if (expr->getType()->isInt())
+        {
+            this->expr = new ImplictCastExpr(expr);
+        }
     }
     else if (op == UnaryExpr::SUB)
     {
         type = TypeSystem::intType;
+        if (expr->getType()->isBool())
+        {
+            this->expr = new ImplictCastExpr(expr, true);
+        }
     }
 }
 
@@ -279,15 +294,18 @@ DeclStmt::DeclStmt(Id *id, ExprNode *expr) : id(id)
 
 IfStmt::IfStmt(ExprNode *cond, StmtNode *thenStmt) : cond(cond), thenStmt(thenStmt)
 {
-    if (cond->getType()->isInt() && cond->getType()->getSize() == 32)
+    if (cond->getType()->isInt())
     {
-        ImplictCastExpr *temp = new ImplictCastExpr(cond);
-        this->cond = temp;
+        this->cond = new ImplictCastExpr(cond);
     }
 }
 
 IfElseStmt::IfElseStmt(ExprNode *cond, StmtNode *thenStmt, StmtNode *elseStmt) : cond(cond), thenStmt(thenStmt), elseStmt(elseStmt)
 {
+    if (cond->getType()->isInt())
+    {
+        this->cond = new ImplictCastExpr(cond);
+    }
 }
 
 WhileStmt::WhileStmt(ExprNode *cond, StmtNode *stmt) : cond(cond), stmt(stmt)
@@ -353,6 +371,11 @@ void BinaryExpr::genCode()
     Function *func = bb->getParent();
     if (op == AND)
     {
+        if (this->isConde())
+        {
+            expr1->setIsCond(true);
+            expr2->setIsCond(true);
+        }
         BasicBlock *expr2BB = new BasicBlock(func); // if the result of lhs is true, jump to the trueBB.
         expr1->genCode();
         backPatch(expr1->trueList(), expr2BB);
@@ -364,6 +387,11 @@ void BinaryExpr::genCode()
     else if (op == OR)
     {
         // Todo
+        if (this->isConde())
+        {
+            expr1->setIsCond(true);
+            expr2->setIsCond(true);
+        }
         BasicBlock *expr2BB = new BasicBlock(now_func);
         expr1->genCode();
         backPatch(expr1->falseList(), expr2BB);
@@ -409,10 +437,13 @@ void BinaryExpr::genCode()
         interB:
         b false
         */
-        BasicBlock *interB;
-        interB = new BasicBlock(now_func);
-        true_list.push_back(new CondBrInstruction(nullptr, interB, dst, now_bb));
-        false_list.push_back(new UncondBrInstruction(nullptr, interB));
+        if (this->isConde())
+        {
+            BasicBlock *interB;
+            interB = new BasicBlock(now_func);
+            true_list.push_back(new CondBrInstruction(nullptr, interB, dst, now_bb));
+            false_list.push_back(new UncondBrInstruction(nullptr, interB));
+        }
     }
     else if (op >= ADD && op <= MOD)
     {
@@ -449,33 +480,11 @@ void UnaryExpr::genCode()
     if (op == SUB)
     {
         Operand *src = expr->getOperand();
-        Operand *tmp;
-        if (!expr->getOperand()->getType()->isInt())
-        {
-            tmp = new Operand(new TemporarySymbolEntry(TypeSystem::intType, SymbolTable::getLabel()));
-            new ZextInstruction(tmp, src, true, now_bb);
-            src = tmp;
-        }
         new BinaryInstruction(BinaryInstruction::SUB, dst, new Operand(new ConstantSymbolEntry(TypeSystem::intType, 0)), src, now_bb);
-        if (isCond) {
-            tmp = new Operand(new TemporarySymbolEntry(TypeSystem::boolType, SymbolTable::getLabel()));
-            new CmpInstruction(CmpInstruction::NE, tmp, dst, new Operand(new ConstantSymbolEntry(TypeSystem::intType, 0)), now_bb);
-            BasicBlock *interB;
-            interB = new BasicBlock(now_func);
-            true_list.push_back(new CondBrInstruction(nullptr, interB, tmp, now_bb));
-            false_list.push_back(new UncondBrInstruction(nullptr, interB));
-        }
     }
     else if (op == NOT)
     {
-        Operand *src = expr->getOperand();
-        if (!expr->getOperand()->getType()->isBool())
-        {
-            Operand *tmp = new Operand(new TemporarySymbolEntry(TypeSystem::boolType, SymbolTable::getLabel()));
-            new CmpInstruction(CmpInstruction::NE, tmp, src, new Operand(new ConstantSymbolEntry(TypeSystem::intType, 0)), now_bb);
-            src = tmp;
-        }
-        new XorInstruction(dst, src, now_bb);
+        new XorInstruction(dst, expr->getOperand(), now_bb);
         if (isCond)
         {
             BasicBlock *interB;
@@ -490,7 +499,7 @@ void CallExpr::genCode()
 {
     std::vector<Operand *> params;
     ExprNode *tmp = param;
-    if (tmp != nullptr)
+    while (tmp != nullptr)
     {
         tmp->genCode();
         params.push_back(tmp->getOperand());
@@ -513,6 +522,24 @@ void Id::genCode()
 
 void ImplictCastExpr::genCode()
 {
+    expr->genCode();
+    // bool转int
+    if (b2i)
+    {
+        new ZextInstruction(dst, expr->getOperand(), true, now_bb);
+    }
+    // int转bool
+    else
+    {
+        new CmpInstruction(CmpInstruction::NE, dst, expr->getOperand(), new Operand(new ConstantSymbolEntry(TypeSystem::intType, 0)), now_bb);
+        if (this->isCond)
+        {
+            BasicBlock *interB;
+            interB = new BasicBlock(now_func);
+            true_list.push_back(new CondBrInstruction(nullptr, interB, dst, now_bb));
+            false_list.push_back(new UncondBrInstruction(nullptr, interB));
+        }
+    }
 }
 
 void CompoundStmt::genCode()
@@ -549,18 +576,20 @@ void DeclStmt::genCode()
         BasicBlock *entry = now_func->getEntry();
         Instruction *alloca;
         Operand *addr;
-        SymbolEntry *addr_se;
-        addr_se = new TemporarySymbolEntry(new PointerType(se->getType()), SymbolTable::getLabel());
-        addr = new Operand(addr_se);
+        addr = new Operand(new TemporarySymbolEntry(new PointerType(se->getType()), SymbolTable::getLabel()));
         alloca = new AllocaInstruction(addr, se); // allocate space for local id in function stack.
-        if (se->getType()->isInt() && expr)
+        entry->insertFront(alloca);               // allocate instructions should be inserted into the begin of the entry block.
+        se->setAddr(addr);                        // set the addr operand in symbol entry so that we can use it in subsequent code generation.
+        if (expr)
         {
             expr->genCode();
-            StoreInstruction *store = new StoreInstruction(addr, expr->getOperand());
-            entry->insertFront(store);
+            new StoreInstruction(addr, expr->getOperand(), now_bb);
         }
-        entry->insertFront(alloca); // allocate instructions should be inserted into the begin of the entry block.
-        se->setAddr(addr);          // set the addr operand in symbol entry so that we can use it in subsequent code generation.
+        if (se->isParam())
+        {
+            now_func->addParam(se->getArgAddr());
+            new StoreInstruction(addr, se->getArgAddr(), now_bb);
+        }
     }
     // 这里要看看下一个有没有
     if (this->getNext())
@@ -694,6 +723,10 @@ void FunctionDef::genCode()
     // set the insert point to the entry basicblock of this function.
     builder->setInsertBB(entry);
 
+    if (decl != nullptr)
+    {
+        decl->genCode();
+    }
     stmt->genCode();
 
     /**

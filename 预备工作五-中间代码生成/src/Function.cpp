@@ -15,10 +15,10 @@ Function::Function(Unit *u, SymbolEntry *s)
 
 Function::~Function()
 {
-//     auto delete_list = block_list;
-//     for (auto &i : delete_list)
-//         delete i;
-//     parent->removeFunc(this);
+    //     auto delete_list = block_list;
+    //     for (auto &i : delete_list)
+    //         delete i;
+    //     parent->removeFunc(this);
 }
 
 // remove the basicblock bb from its block_list.
@@ -31,7 +31,17 @@ void Function::output() const
 {
     FunctionType *funcType = dynamic_cast<FunctionType *>(sym_ptr->getType());
     Type *retType = funcType->getRetType();
-    fprintf(yyout, "define %s %s() {\n", retType->toStr().c_str(), sym_ptr->toStr().c_str());
+    fprintf(yyout, "define %s %s(", retType->toStr().c_str(), sym_ptr->toStr().c_str());
+    if (params.size() > 0)
+    {
+        for (long unsigned int i = 0; i < params.size(); i++) {
+            if (i != 0) {
+                fprintf(yyout, ", ");
+            }
+            fprintf(yyout, "%s %s", params[i]->getType()->toStr().c_str(), params[i]->toStr().c_str());
+        }
+    }
+    fprintf(yyout, ") {\n");
     std::set<BasicBlock *> v;
     std::list<BasicBlock *> q;
     q.push_back(entry);

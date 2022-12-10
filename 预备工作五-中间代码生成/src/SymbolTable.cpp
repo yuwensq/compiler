@@ -1,4 +1,5 @@
 #include "SymbolTable.h"
+#include "Operand.h"
 #include "Type.h"
 #include <iostream>
 #include <sstream>
@@ -49,6 +50,10 @@ std::string ConstantSymbolEntry::toStr()
 IdentifierSymbolEntry::IdentifierSymbolEntry(Type *type, std::string name, int scope, bool sysy) : SymbolEntry(type, SymbolEntry::VARIABLE), name(name), sysy(sysy)
 {
     this->scope = scope;
+    // 如果是param，留一个Operand作为参数
+    if (scope == PARAM) {
+        argAddr = new Operand(new TemporarySymbolEntry(type, SymbolTable::getLabel()));;
+    }
     addr = nullptr;
 }
 
