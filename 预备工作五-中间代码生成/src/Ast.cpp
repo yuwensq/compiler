@@ -166,7 +166,7 @@ int BinaryExpr::getValue()
     return value;
 }
 
-UnaryExpr::UnaryExpr(SymbolEntry *se, int op, ExprNode *expr) : ExprNode(se, UNARYEXPR), op(op), expr(expr)
+UnaryExpr::UnaryExpr(SymbolEntry *se, int op, ExprNode *expr) : ExprNode(se), op(op), expr(expr)
 {
     std::string op_type;
     switch (op)

@@ -43,30 +43,16 @@ public:
 
 class ExprNode : public Node
 {
-private:
-    int kind;
-
 protected:
     bool isCond;
     SymbolEntry *symbolEntry;
     Operand *dst; // The result of the subtree is stored into dst.
-    enum
-    {
-        EXPR,
-        INITVALUELISTEXPR,
-        IMPLICTCASTEXPR,
-        UNARYEXPR
-    };
     Type *type;
 
 public:
-    ExprNode(SymbolEntry *symbolEntry, int kind = EXPR) : symbolEntry(symbolEntry), kind(kind), isCond(false){};
+    ExprNode(SymbolEntry *symbolEntry) : symbolEntry(symbolEntry), isCond(false){};
     Operand *getOperand() { return dst; };
     SymbolEntry *getSymPtr() { return symbolEntry; };
-    bool isExpr() const { return kind == EXPR; };
-    bool isInitValueListExpr() const { return kind == INITVALUELISTEXPR; };
-    bool isImplictCastExpr() const { return kind == IMPLICTCASTEXPR; };
-    bool isUnaryExpr() const { return kind == UNARYEXPR; };
     bool isConde() const { return isCond; };
     void setIsCond(bool isCond) { this->isCond = isCond; };
     void output(int level);
@@ -74,7 +60,6 @@ public:
     void typeCheck(){};
     virtual int getValue() { return -1; };
     virtual Type *getType() { return type; };
-    Type *getOriginType() { return type; };
 };
 
 class BinaryExpr : public ExprNode
@@ -124,8 +109,6 @@ public:
     int getValue();
     void typeCheck();
     void genCode();
-    int getOp() const { return op; };
-    void setType(Type *type) { this->type = type; }
 };
 
 class CallExpr : public ExprNode
@@ -177,7 +160,7 @@ private:
     bool b2i; // true为bool转int，false为int转bool
 
 public:
-    ImplictCastExpr(ExprNode *expr, bool b2i = false) : ExprNode(nullptr, IMPLICTCASTEXPR), expr(expr), b2i(b2i)
+    ImplictCastExpr(ExprNode *expr, bool b2i = false) : ExprNode(nullptr), expr(expr), b2i(b2i)
     {
         type = b2i ? TypeSystem::intType : TypeSystem::boolType;
         dst = new Operand(new TemporarySymbolEntry(type, SymbolTable::getLabel()));
@@ -188,7 +171,6 @@ public:
         }
     };
     void output(int level);
-    ExprNode *getExpr() const { return expr; };
     void typeCheck(){};
     void genCode();
 };
