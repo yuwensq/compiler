@@ -119,6 +119,7 @@ SymbolTable::SymbolTable(SymbolTable *prev)
     4. If you find the entry, return it.
     5. If you can't find it in all symbol tables, return nullptr.
 */
+// local变量表示是否只在当前作用域找
 SymbolEntry *SymbolTable::lookup(std::string name, bool local)
 {
     SymbolTable *table = this;

@@ -9,6 +9,7 @@
     #define YYERROR_VERBOSE 1
     int yyerror(char const*);
     std::stack<StmtNode*> whileStack;
+    Type *recentFuncRetType;
 }
 
 %code requires {
@@ -134,27 +135,29 @@ WhileStmt
 BreakStmt
     : BREAK SEMICOLON {
         if (whileStack.size() <= 0) {
-            fprintf(stderr, "No while\n");
-            exit(-1);
+            $$ = new BreakStmt(nullptr);
         }
-        $$ = new BreakStmt(whileStack.top());
+        else {
+            $$ = new BreakStmt(whileStack.top());
+        }
     }
     ;
 ContinueStmt
     : CONTINUE SEMICOLON {
         if (whileStack.size() <= 0) {
-            fprintf(stderr, "No while\n");
-            exit(-1);
+            $$ = new ContinueStmt(nullptr);
         }
-        $$ = new ContinueStmt(whileStack.top());
+        else {
+            $$ = new ContinueStmt(whileStack.top());
+        }
     }
     ;
 ReturnStmt
     : RETURN SEMICOLON {
-        $$ = new ReturnStmt();
+        $$ = new ReturnStmt(nullptr, recentFuncRetType);
     }
     | RETURN Exp SEMICOLON {
-        $$ = new ReturnStmt($2);
+        $$ = new ReturnStmt($2, recentFuncRetType);
     }
     ;
 Exp
@@ -191,7 +194,8 @@ UnaryExp
     : PrimaryExp {$$ = $1;}
     | ID LPAREN FuncRParamsList RPAREN {
         SymbolEntry* se;
-        se = identifiers->lookup($1);
+        se = globals->lookup($1);
+        // 判断函数未定义
         if(se == nullptr)
         {
             fprintf(stderr, "function \"%s\" is undefined\n", (char*)$1);
@@ -334,6 +338,12 @@ VarDef
     }
     | ID ASSIGN InitVal {
         SymbolEntry* se;
+        se = identifiers->lookup($1, true);
+        if (se != nullptr) { //重复定义了
+            fprintf(stderr, "variable \"%s\" is repeated declared\n", (char*)$1);
+            delete []$1;
+            assert(se == nullptr);
+        }
         se = new IdentifierSymbolEntry(TypeSystem::intType, $1, identifiers->getLevel());
         identifiers->install($1, se);
         ((IdentifierSymbolEntry*)se)->setValue($3->getValue());
@@ -356,6 +366,12 @@ ConstDefList
 ConstDef
     : ID ASSIGN ConstInitVal {
         SymbolEntry* se;
+        se = identifiers->lookup($1, true);
+        if (se != nullptr) { //重复定义了
+            fprintf(stderr, "variable \"%s\" is repeated declared\n", (char*)$1);
+            delete []$1;
+            assert(se == nullptr);
+        }
         se = new IdentifierSymbolEntry(TypeSystem::constIntType, $1, identifiers->getLevel());
         identifiers->install($1, se);
         ((IdentifierSymbolEntry*)se)->setValue($3->getValue());
@@ -376,6 +392,7 @@ ConstInitVal
 FuncDef
     :
     Type ID {
+        recentFuncRetType = $1;
         identifiers = new SymbolTable(identifiers);
     }
     LPAREN FuncFParamsList RPAREN {

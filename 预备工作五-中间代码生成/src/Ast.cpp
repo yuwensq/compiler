@@ -36,7 +36,8 @@ void Node::setNext(Node *node)
 
 BinaryExpr::BinaryExpr(SymbolEntry *se, int op, ExprNode *expr1, ExprNode *expr2) : ExprNode(se), op(op), expr1(expr1), expr2(expr2)
 {
-    dst = new Operand(se);
+    this->dst = new Operand(se);
+    this->type = se->getType();
     std::string op_type;
     switch (op)
     {
@@ -87,7 +88,6 @@ BinaryExpr::BinaryExpr(SymbolEntry *se, int op, ExprNode *expr1, ExprNode *expr2
     // 前几个操作符是算术运算符，返回类型是int型，后面是逻辑运算符，返回类型是Bool型
     if (op >= BinaryExpr::AND && op <= BinaryExpr::NOTEQUAL)
     {
-        type = TypeSystem::boolType;
         // 对于AND和OR逻辑运算，如果操作数表达式为int型，需要进行隐式转换，将int型转为bool型。
         if (op == BinaryExpr::AND || op == BinaryExpr::OR)
         {
@@ -111,10 +111,6 @@ BinaryExpr::BinaryExpr(SymbolEntry *se, int op, ExprNode *expr1, ExprNode *expr2
                 this->expr2 = new ImplictCastExpr(expr2, true);
             }
         }
-    }
-    else
-    {
-        type = TypeSystem::intType;
     }
 }
 
@@ -168,6 +164,8 @@ int BinaryExpr::getValue()
 
 UnaryExpr::UnaryExpr(SymbolEntry *se, int op, ExprNode *expr) : ExprNode(se), op(op), expr(expr)
 {
+    this->dst = new Operand(se);
+    this->type = se->getType();
     std::string op_type;
     switch (op)
     {
@@ -182,10 +180,8 @@ UnaryExpr::UnaryExpr(SymbolEntry *se, int op, ExprNode *expr) : ExprNode(se), op
     {
         fprintf(stderr, "invalid operand of type \'void\' to unary \'opeartor%s\'\n", op_type.c_str());
     }
-    dst = new Operand(se);
     if (op == UnaryExpr::NOT)
     {
-        type = TypeSystem::boolType;
         if (expr->getType()->isInt())
         {
             this->expr = new ImplictCastExpr(expr);
@@ -193,7 +189,6 @@ UnaryExpr::UnaryExpr(SymbolEntry *se, int op, ExprNode *expr) : ExprNode(se), op
     }
     else if (op == UnaryExpr::SUB)
     {
-        type = TypeSystem::intType;
         if (expr->getType()->isBool())
         {
             this->expr = new ImplictCastExpr(expr, true);
@@ -240,10 +235,11 @@ CallExpr::CallExpr(SymbolEntry *se, ExprNode *param) : ExprNode(se), param(param
     // 由于存在函数重载的情况，这里我们提前将重载的函数通过符号表项的next指针连接，这里需要根据实参个数判断对应哪一个具体函数，找到其对应得符号表项
     SymbolEntry *s = se;
     Type *type;
+    std::vector<Type *> FParams;
     while (s)
     {
         type = s->getType();
-        std::vector<Type *> FParams = ((FunctionType *)type)->getParamsType();
+        FParams = ((FunctionType *)type)->getParamsType();
         if (paramCnt == FParams.size())
         {
             this->symbolEntry = s;
@@ -260,10 +256,9 @@ CallExpr::CallExpr(SymbolEntry *se, ExprNode *param) : ExprNode(se), param(param
             SymbolEntry *se = new TemporarySymbolEntry(this->type, SymbolTable::getLabel());
             dst = new Operand(se);
         }
-        std::vector<Type *> Fparams = ((FunctionType *)type)->getParamsType();
         ExprNode *temp = param;
         // 逐个比较形参列表和实参列表中每个参数的类型是否相同
-        for (auto it = Fparams.begin(); it != Fparams.end(); it++)
+        for (auto it = FParams.begin(); it != FParams.end(); it++)
         {
             if (temp == nullptr)
             {
@@ -281,15 +276,13 @@ CallExpr::CallExpr(SymbolEntry *se, ExprNode *param) : ExprNode(se), param(param
             fprintf(stderr, "too many arguments to function %s %s\n", symbolEntry->toStr().c_str(), type->toStr().c_str());
         }
     }
+    else {
+        fprintf(stderr, "function is undefined\n");
+    }
     if (((IdentifierSymbolEntry *)se)->isSysy())
     {
         unit.insertDeclare(se);
     }
-}
-
-DeclStmt::DeclStmt(Id *id, ExprNode *expr) : id(id)
-{
-    this->expr = expr;
 }
 
 IfStmt::IfStmt(ExprNode *cond, StmtNode *thenStmt) : cond(cond), thenStmt(thenStmt)
@@ -310,10 +303,43 @@ IfElseStmt::IfElseStmt(ExprNode *cond, StmtNode *thenStmt, StmtNode *elseStmt) :
 
 WhileStmt::WhileStmt(ExprNode *cond, StmtNode *stmt) : cond(cond), stmt(stmt)
 {
-    if (cond->getType()->isInt() && cond->getType()->getSize() == 32)
+    if (cond->getType()->isInt())
     {
-        ImplictCastExpr *temp = new ImplictCastExpr(cond);
-        this->cond = temp;
+        this->cond = new ImplictCastExpr(cond);
+    }
+}
+
+BreakStmt::BreakStmt(StmtNode *whileStmt) : whileStmt(whileStmt)
+{
+    if (whileStmt == nullptr)
+    {
+        fprintf(stderr, "no while stmt for this break stmt\n");
+    }
+}
+
+ContinueStmt::ContinueStmt(StmtNode *whileStmt) : whileStmt(whileStmt)
+{
+    if (whileStmt == nullptr)
+    {
+        fprintf(stderr, "no while stmt for this continue stmt\n");
+    }
+}
+
+ReturnStmt::ReturnStmt(ExprNode *retValue, Type *funcRetType) : retValue(retValue)
+{
+    // 判断返回值和函数返回值是否一致
+    Type *retType;
+    if (retValue == nullptr)
+    {
+        retType = TypeSystem::voidType;
+    }
+    else
+    {
+        retType = retValue->getType();
+    }
+    if (retType->getKind() != funcRetType->getKind())
+    {
+        fprintf(stderr, "return type isn't equal to function type\n");
     }
 }
 
@@ -677,14 +703,20 @@ void WhileStmt::genCode()
 
 void BreakStmt::genCode()
 {
-    new UncondBrInstruction(((WhileStmt *)whileStmt)->get_end_bb(), now_bb);
-    builder->setInsertBB(new BasicBlock(now_func));
+    if (whileStmt)
+    {
+        new UncondBrInstruction(((WhileStmt *)whileStmt)->get_end_bb(), now_bb);
+        builder->setInsertBB(new BasicBlock(now_func));
+    }
 }
 
 void ContinueStmt::genCode()
 {
-    new UncondBrInstruction(((WhileStmt *)whileStmt)->get_cond_bb(), now_bb);
-    builder->setInsertBB(new BasicBlock(now_func));
+    if (whileStmt)
+    {
+        new UncondBrInstruction(((WhileStmt *)whileStmt)->get_cond_bb(), now_bb);
+        builder->setInsertBB(new BasicBlock(now_func));
+    }
 }
 
 void ReturnStmt::genCode()

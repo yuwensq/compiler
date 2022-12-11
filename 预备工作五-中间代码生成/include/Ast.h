@@ -228,7 +228,7 @@ private:
     ExprNode *expr;
 
 public:
-    DeclStmt(Id *id, ExprNode *expr = nullptr);
+    DeclStmt(Id *id, ExprNode *expr = nullptr) : id(id), expr(expr){};
     void output(int level);
     void typeCheck();
     void genCode();
@@ -295,7 +295,7 @@ private:
     StmtNode *whileStmt;
 
 public:
-    BreakStmt(StmtNode *whileStmt) { this->whileStmt = whileStmt; };
+    BreakStmt(StmtNode *whileStmt);
     void output(int level);
     void typeCheck(){};
     void genCode();
@@ -307,7 +307,7 @@ private:
     StmtNode *whileStmt;
 
 public:
-    ContinueStmt(StmtNode *whileStmt) { this->whileStmt = whileStmt; };
+    ContinueStmt(StmtNode *whileStmt);
     void output(int level);
     void typeCheck(){};
     void genCode();
@@ -319,7 +319,7 @@ private:
     ExprNode *retValue;
 
 public:
-    ReturnStmt(ExprNode *retValue = nullptr) : retValue(retValue){};
+    ReturnStmt(ExprNode *retValue = nullptr, Type *funcRetType = nullptr);
     void output(int level);
     void typeCheck();
     void genCode();
