@@ -21,7 +21,7 @@ private:
     SymbolEntry *sym_ptr;
     BasicBlock *entry;
     Unit *parent;
-    std::vector<Operand *> params;
+    std::vector<Operand *> params; // 存函数的参数
 
 public:
     Function(Unit *, SymbolEntry *);

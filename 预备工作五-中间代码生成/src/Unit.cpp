@@ -24,8 +24,9 @@ void Unit::output() const
     for (auto &func : func_list)
         func->output();
     // 打印declare
-    for (auto se : declare_list) {
-        std::string type = ((FunctionType*)se->getType())->toStr();
+    for (auto se : declare_list)
+    {
+        std::string type = ((FunctionType *)se->getType())->toStr();
         std::string name = se->toStr();
         std::string retType = type.substr(0, type.find("("));
         std::string fparams = type.substr(type.find("("));

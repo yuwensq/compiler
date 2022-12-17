@@ -51,8 +51,10 @@ IdentifierSymbolEntry::IdentifierSymbolEntry(Type *type, std::string name, int s
 {
     this->scope = scope;
     // 如果是param，留一个Operand作为参数
-    if (scope == PARAM) {
-        argAddr = new Operand(new TemporarySymbolEntry(type, SymbolTable::getLabel()));;
+    if (scope == PARAM)
+    {
+        argAddr = new Operand(new TemporarySymbolEntry(type, SymbolTable::getLabel()));
+        ;
     }
     addr = nullptr;
 }

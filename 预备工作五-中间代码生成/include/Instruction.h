@@ -146,7 +146,7 @@ protected:
     BasicBlock *false_branch;
 };
 
-class CallInstruction : public Instruction
+class CallInstruction : public Instruction // 函数调用
 {
 public:
     CallInstruction(Operand *dst, SymbolEntry *func, std::vector<Operand *> params, BasicBlock *insert_bb = nullptr);
@@ -165,14 +165,14 @@ public:
     void output() const;
 };
 
-class XorInstruction : public Instruction
+class XorInstruction : public Instruction // not指令
 {
 public:
     XorInstruction(Operand *dst, Operand *src, BasicBlock *insert_bb = nullptr);
     void output() const;
 };
 
-class ZextInstruction : public Instruction
+class ZextInstruction : public Instruction // bool转为int
 {
 public:
     ZextInstruction(Operand *dst, Operand *src, bool b2i = false, BasicBlock *insert_bb = nullptr);

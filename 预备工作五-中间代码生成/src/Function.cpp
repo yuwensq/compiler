@@ -34,8 +34,10 @@ void Function::output() const
     fprintf(yyout, "define %s %s(", retType->toStr().c_str(), sym_ptr->toStr().c_str());
     if (params.size() > 0)
     {
-        for (long unsigned int i = 0; i < params.size(); i++) {
-            if (i != 0) {
+        for (long unsigned int i = 0; i < params.size(); i++)
+        {
+            if (i != 0)
+            {
                 fprintf(yyout, ", ");
             }
             fprintf(yyout, "%s %s", params[i]->getType()->toStr().c_str(), params[i]->toStr().c_str());
