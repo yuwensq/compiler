@@ -172,8 +172,63 @@ void LinearScan::computeLiveIntervals()
 bool LinearScan::linearScanRegisterAllocation()
 {
     // Todo
+    active.clear();
+    regs.clear();
+    for (int i = 4; i < 11; i++)
+    {
+        regs.push_back(i);
+    }
+    bool result = true;
+    for (auto interval : intervals)
+    {
+        expireOldIntervals(interval);
+        if (active.size() == 7)
+        { // 11 - 4 = 7
+            spillAtInterval(interval);
+            result = false;
+        }
+        else
+        {
+            interval->rreg = regs[0];
+            regs.erase(regs.begin());
+            active.push_back(interval);
+            sort(active.begin(), active.end(), compareEnd);
+        }
+    }
+    return result;
+}
 
-    return true;
+void LinearScan::expireOldIntervals(Interval *interval)
+{
+    // Todo
+    std::vector<Interval *>::iterator it = active.begin();
+    while (it != active.end())
+    {
+        Interval *actInterval = *it;
+        if (actInterval->end >= interval->start)
+        {
+            break;
+        }
+        regs.push_back(actInterval->rreg);
+        it = active.erase(it);
+    }
+}
+
+void LinearScan::spillAtInterval(Interval *interval)
+{
+    // Todo
+    if (active.back()->end > interval->end)
+    {
+        interval->rreg = active.back()->rreg;
+        active.back()->spill = true;
+        active.pop_back();
+        active.push_back(interval);
+        sort(active.begin(), active.end(), compareEnd);
+    }
+    else
+    {
+        interval->spill = true;
+    }
 }
 
 void LinearScan::modifyCode()
@@ -200,20 +255,36 @@ void LinearScan::genSpillCode()
          * 1. insert ldr inst before the use of vreg
          * 2. insert str inst after the def of vreg
          */
+        // 在栈中分配内存
+        interval->disp = func->AllocSpace(4) * -1;
+        // 在use前插入ldr
+        for (auto use : interval->uses)
+        {
+            auto cur_bb = use->getParent()->getParent();
+            auto cur_inst = new LoadMInstruction(cur_bb,
+                                                 new MachineOperand(*use),
+                                                 new MachineOperand(MachineOperand::REG, 11),
+                                                 new MachineOperand(MachineOperand::IMM, interval->disp));
+            cur_bb->insertBefore(cur_inst, use->getParent());                                            
+        }
+        // 在def后插入str
+        for (auto def : interval->defs) {
+            auto cur_bb = def->getParent()->getParent();
+            auto cur_inst = new StoreMInstruction(cur_bb,
+                                                 new MachineOperand(*def),
+                                                 new MachineOperand(MachineOperand::REG, 11),
+                                                 new MachineOperand(MachineOperand::IMM, interval->disp));
+            cur_bb->insertAfter(cur_inst, def->getParent());                                            
+        }
     }
-}
-
-void LinearScan::expireOldIntervals(Interval *interval)
-{
-    // Todo
-}
-
-void LinearScan::spillAtInterval(Interval *interval)
-{
-    // Todo
 }
 
 bool LinearScan::compareStart(Interval *a, Interval *b)
 {
     return a->start < b->start;
+}
+
+bool LinearScan::compareEnd(Interval *a, Interval *b)
+{
+    return a->end < b->end;
 }

@@ -222,6 +222,8 @@ public:
     void InsertInst(MachineInstruction *inst) { this->inst_list.push_back(inst); };
     void addPred(MachineBlock *p) { this->pred.push_back(p); };
     void addSucc(MachineBlock *s) { this->succ.push_back(s); };
+    void insertBefore(MachineInstruction *, MachineInstruction *);
+    void insertAfter(MachineInstruction *, MachineInstruction *);
     std::set<MachineOperand *> &getLiveIn() { return live_in; };
     std::set<MachineOperand *> &getLiveOut() { return live_out; };
     std::vector<MachineBlock *> &getPreds() { return pred; };

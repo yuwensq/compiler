@@ -344,6 +344,19 @@ MachineFunction::MachineFunction(MachineUnit *p, SymbolEntry *sym_ptr)
     this->stack_size = 0;
 };
 
+void MachineBlock::insertBefore(MachineInstruction *insertee, MachineInstruction *pin)
+{
+    auto it = std::find(inst_list.begin(), inst_list.end(), pin);
+    inst_list.insert(it, insertee);
+}
+
+void MachineBlock::insertAfter(MachineInstruction *insertee, MachineInstruction *pin)
+{   
+    auto it = std::find(inst_list.begin(), inst_list.end(), pin);
+    it++;
+    inst_list.insert(it, insertee);
+}
+
 void MachineBlock::output()
 {
     fprintf(yyout, ".L%d:\n", this->no);
@@ -444,12 +457,12 @@ void MachineUnit::output()
     fprintf(yyout, "\t.arch_extension crc\n");
     fprintf(yyout, "\t.arm\n");
     PrintGlobalDecl();
-    fprintf(yyout, "\t.text\n");
+    fprintf(yyout, "\n\t.text\n");
     for (auto iter : func_list)
         iter->output();
     if (global_vars.size() > 0)
     {
-        fprintf(yyout, "addr:\n");
+        fprintf(yyout, "\naddr:\n");
         for (auto se : global_vars)
         {
             fprintf(yyout, "addr_%s:\n", se->toStr().c_str() + 1);
