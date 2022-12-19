@@ -1,5 +1,7 @@
 #include "Unit.h"
 #include "Type.h"
+#include "AsmBuilder.h"
+#include "MachineCode.h"
 extern FILE *yyout;
 
 void Unit::insertFunc(Function *f)
@@ -38,6 +40,7 @@ void Unit::genMachineCode(MachineUnit* munit)
 {
     AsmBuilder* builder = new AsmBuilder();
     builder->setUnit(munit);
+    munit->setGlobalVars(this->global_vars);
     for (auto &func : func_list)
         func->genMachineCode(builder);
 }

@@ -3,6 +3,7 @@
 #include <iostream>
 #include "Function.h"
 #include "Type.h"
+#include "MachineCode.h"
 extern FILE *yyout;
 
 Instruction::Instruction(unsigned instType, BasicBlock *insert_bb)
@@ -411,7 +412,7 @@ MachineOperand *Instruction::genMachineOperand(Operand *ope)
     {
         auto id_se = dynamic_cast<IdentifierSymbolEntry *>(se);
         if (id_se->isGlobal())
-            mope = new MachineOperand(id_se->toStr().c_str());
+            mope = new MachineOperand(id_se->toStr().c_str() + 1);
         else
             exit(0);
     }
@@ -553,6 +554,21 @@ void RetInstruction::genMachineCode(AsmBuilder *builder)
      * 1. Generate mov instruction to save return value in r0
      * 2. Restore callee saved registers and sp, fp
      * 3. Generate bx instruction */
+    auto cur_bb = builder->getBlock();
+    // 如果有返回值
+    if (operands.size() > 0)
+    {
+        cur_bb->InsertInst(new MovMInstruction(cur_bb, MovMInstruction::MOV, genMachineReg(0), genMachineOperand(operands[0])));
+    }
+    auto sp = genMachineReg(13);
+    // 释放栈空间
+    int stack_size = builder->getFunction()->AllocSpace(0);
+    if (stack_size > 0)
+    {
+        cur_bb->InsertInst(new BinaryMInstruction(cur_bb, BinaryMInstruction::ADD, sp, sp, genMachineImm(stack_size)));
+    }
+    // bx指令
+    cur_bb->InsertInst(new BranchMInstruction(cur_bb, BranchMInstruction::BX, genMachineReg(14)));
 }
 
 void XorInstruction::genMachineCode(AsmBuilder *builder)

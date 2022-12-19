@@ -193,7 +193,7 @@ public:
         POP
     };
     StackMInstrcuton(MachineBlock *p, int op,
-                     MachineOperand *src,
+                     std::vector<MachineOperand *> srcs,
                      int cond = MachineInstruction::NONE);
     void output();
 };
@@ -255,6 +255,7 @@ public:
     };
     void InsertBlock(MachineBlock *block) { this->block_list.push_back(block); };
     void addSavedRegs(int regno) { saved_regs.insert(regno); };
+    std::vector<MachineOperand *> getSavedRegs();
     void output();
 };
 
@@ -262,6 +263,7 @@ class MachineUnit
 {
 private:
     std::vector<MachineFunction *> func_list;
+    std::vector<SymbolEntry *> global_vars;
     void PrintGlobalDecl();
 
 public:
@@ -269,6 +271,7 @@ public:
     std::vector<MachineFunction *>::iterator begin() { return func_list.begin(); };
     std::vector<MachineFunction *>::iterator end() { return func_list.end(); };
     void InsertFunc(MachineFunction *func) { func_list.push_back(func); };
+    void setGlobalVars(std::vector<SymbolEntry *> gv) { global_vars = gv; };
     void output();
 };
 
