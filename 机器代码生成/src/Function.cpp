@@ -86,5 +86,4 @@ void Function::genMachineCode(AsmBuilder* builder)
             mblock->addSucc(map[*succ]);
     }
     cur_unit->InsertFunc(cur_func);
-
 }

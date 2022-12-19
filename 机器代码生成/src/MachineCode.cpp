@@ -169,12 +169,12 @@ LoadMInstruction::LoadMInstruction(MachineBlock *p,
     this->cond = cond;
     this->def_list.push_back(dst);
     this->use_list.push_back(src1);
-    if (src2)
-        this->use_list.push_back(src2);
     dst->setParent(this);
     src1->setParent(this);
-    if (src2)
+    if (src2) {
+        this->use_list.push_back(src2);
         src2->setParent(this);
+    }
 }
 
 void LoadMInstruction::output()
@@ -207,15 +207,42 @@ void LoadMInstruction::output()
 }
 
 StoreMInstruction::StoreMInstruction(MachineBlock *p,
-                                     MachineOperand *src1, MachineOperand *src2, MachineOperand *src3,
+                                     MachineOperand *src, MachineOperand *dst, MachineOperand *off,
                                      int cond)
 {
     // TODO
+    this->parent = p;
+    this->type = MachineInstruction::STORE;
+    this->op = -1;
+    this->cond = cond;
+    use_list.push_back(src);
+    use_list.push_back(dst);
+    src->setParent(this);
+    dst->setParent(this);
+    if (off != nullptr) {
+        use_list.push_back(off);
+        off->setParent(this);
+    }
 }
 
 void StoreMInstruction::output()
 {
     // TODO
+    fprintf(yyout, "\tstr ");
+    this->use_list[0]->output();
+    fprintf(yyout, ", ");
+    // Store address
+    if (this->use_list[1]->isReg() || this->use_list[1]->isVReg())
+        fprintf(yyout, "[");
+    this->use_list[1]->output();
+    if (this->use_list.size() > 2)
+    {
+        fprintf(yyout, ", ");
+        this->use_list[2]->output();
+    }
+    if (this->use_list[1]->isReg() || this->use_list[1]->isVReg())
+        fprintf(yyout, "]");
+    fprintf(yyout, "\n");
 }
 
 MovMInstruction::MovMInstruction(MachineBlock *p, int op,
@@ -395,9 +422,9 @@ void MachineFunction::output()
     std::vector<MachineOperand *> save_regs = getSavedRegs();
     save_regs.push_back(fp);
     save_regs.push_back(lr);
-    new StackMInstrcuton(entry, StackMInstrcuton::PUSH, save_regs);
-    new MovMInstruction(entry, MovMInstruction::MOV, fp, sp);
-    new BinaryMInstruction(entry, BinaryMInstruction::SUB, sp, sp, new MachineOperand(MachineOperand::IMM, stack_size));
+    entry->insertFront(new BinaryMInstruction(entry, BinaryMInstruction::SUB, sp, sp, new MachineOperand(MachineOperand::IMM, stack_size)));
+    entry->insertFront(new MovMInstruction(entry, MovMInstruction::MOV, fp, sp));
+    entry->insertFront(new StackMInstrcuton(entry, StackMInstrcuton::PUSH, save_regs));
     for (auto iter : block_list)
         iter->output();
 }

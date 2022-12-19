@@ -1,3 +1,4 @@
+const int a = 10;
 int main(){
-    return 3;
+    return a % 5;
 }
