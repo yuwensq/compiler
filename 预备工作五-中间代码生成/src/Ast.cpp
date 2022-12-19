@@ -865,22 +865,6 @@ void ExprStmt::typeCheck()
 
 void FunctionDef::typeCheck()
 {
-    // SymbolEntry *se = this->getSymbolEntry();
-    // Type *ret = ((FunctionType *)(se->getType()))->getRetType();
-    // StmtNode *stmt = this->stmt;
-    // // 如果定义部分为空，需根据返回值类型判断是否正确返回
-    // if (stmt == nullptr)
-    // {
-    //     if (ret != TypeSystem::voidType)
-    //         fprintf(stderr, "non-void function does not return a value\n");
-    //     return false;
-    // }
-    // if (!stmt->typeCheck(ret))
-    // {
-    //     fprintf(stderr, "function does not have a return statement\n");
-    //     return false;
-    // }
-    // return false;
 }
 
 // output代码区
