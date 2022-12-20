@@ -86,6 +86,8 @@ void MachineOperand::output()
     case LABEL:
         if (this->label.substr(0, 2) == ".L")
             fprintf(yyout, "%s", this->label.c_str());
+        else if (this->label.substr(0, 1) == "@")
+            fprintf(yyout, "%s", this->label.c_str() + 1);
         else
             fprintf(yyout, "addr_%s", this->label.c_str());
     default:
@@ -98,8 +100,23 @@ void MachineInstruction::PrintCond()
     // TODO
     switch (cond)
     {
+    case EQ:
+        fprintf(yyout, "eq");
+        break;
+    case NE:
+        fprintf(yyout, "ne");
+        break;
     case LT:
         fprintf(yyout, "lt");
+        break;
+    case LE:
+        fprintf(yyout, "le");
+        break;
+    case GT:
+        fprintf(yyout, "gt");
+        break;
+    case GE:
+        fprintf(yyout, "ge");
         break;
     default:
         break;
@@ -171,7 +188,8 @@ LoadMInstruction::LoadMInstruction(MachineBlock *p,
     this->use_list.push_back(src1);
     dst->setParent(this);
     src1->setParent(this);
-    if (src2) {
+    if (src2)
+    {
         this->use_list.push_back(src2);
         src2->setParent(this);
     }
@@ -219,7 +237,8 @@ StoreMInstruction::StoreMInstruction(MachineBlock *p,
     use_list.push_back(dst);
     src->setParent(this);
     dst->setParent(this);
-    if (off != nullptr) {
+    if (off != nullptr)
+    {
         use_list.push_back(off);
         off->setParent(this);
     }
@@ -313,13 +332,24 @@ CmpMInstruction::CmpMInstruction(MachineBlock *p,
                                  int cond)
 {
     // TODO
+    this->parent = p;
+    this->type = MachineInstruction::CMP;
+    this->op = -1;
+    this->cond = cond;
+    use_list.push_back(src1);
+    use_list.push_back(src2);
+    src1->setParent(this);
+    src2->setParent(this);
 }
 
 void CmpMInstruction::output()
 {
     // TODO
-    // Jsut for reg alloca test
-    // delete it after test
+    fprintf(yyout, "\tcmp ");
+    use_list[0]->output();
+    fprintf(yyout, ", ");
+    use_list[1]->output();
+    fprintf(yyout, "\n");
 }
 
 StackMInstrcuton::StackMInstrcuton(MachineBlock *p, int op,
@@ -378,10 +408,18 @@ void MachineBlock::insertBefore(MachineInstruction *insertee, MachineInstruction
 }
 
 void MachineBlock::insertAfter(MachineInstruction *insertee, MachineInstruction *pin)
-{   
+{
     auto it = std::find(inst_list.begin(), inst_list.end(), pin);
     it++;
     inst_list.insert(it, insertee);
+}
+
+void MachineBlock::backPatch(std::vector<MachineOperand *> saved_regs)
+{
+    for (auto inst : pops)
+    {
+        ((StackMInstrcuton *)inst)->setRegs(saved_regs);
+    }
 }
 
 void MachineBlock::output()
@@ -425,8 +463,10 @@ void MachineFunction::output()
     entry->insertFront(new BinaryMInstruction(entry, BinaryMInstruction::SUB, sp, sp, new MachineOperand(MachineOperand::IMM, stack_size)));
     entry->insertFront(new MovMInstruction(entry, MovMInstruction::MOV, fp, sp));
     entry->insertFront(new StackMInstrcuton(entry, StackMInstrcuton::PUSH, save_regs));
-    for (auto iter : block_list)
+    for (auto iter : block_list) {
+        iter->backPatch(save_regs);
         iter->output();
+    }
 }
 
 void MachineUnit::PrintGlobalDecl()

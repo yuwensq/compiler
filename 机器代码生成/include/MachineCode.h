@@ -195,6 +195,10 @@ public:
     StackMInstrcuton(MachineBlock *p, int op,
                      std::vector<MachineOperand *> srcs,
                      int cond = MachineInstruction::NONE);
+    void setRegs(std::vector<MachineOperand *> regs)
+    {
+        use_list.assign(regs.begin(), regs.end());
+    }
     void output();
 };
 
@@ -205,6 +209,7 @@ private:
     int no;
     std::vector<MachineBlock *> pred, succ;
     std::vector<MachineInstruction *> inst_list;
+    std::vector<MachineInstruction *> pops;
     std::set<MachineOperand *> live_in;
     std::set<MachineOperand *> live_out;
 
@@ -225,6 +230,8 @@ public:
     void insertBefore(MachineInstruction *, MachineInstruction *);
     void insertAfter(MachineInstruction *, MachineInstruction *);
     void insertFront(MachineInstruction *inst) { this->inst_list.insert(inst_list.begin(), inst); };
+    void backPatch(std::vector<MachineOperand *>);
+    void addPop(MachineInstruction *inst) { pops.push_back(inst); };
     std::set<MachineOperand *> &getLiveIn() { return live_in; };
     std::set<MachineOperand *> &getLiveOut() { return live_out; };
     std::vector<MachineBlock *> &getPreds() { return pred; };

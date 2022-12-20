@@ -504,7 +504,6 @@ void StoreInstruction::genMachineCode(AsmBuilder *builder)
         cur_block->InsertInst(cur_inst);
         src = new MachineOperand(*internal_reg);
     }
- 
     // Store global operand
     if (operands[0]->getEntry()->isVariable() && dynamic_cast<IdentifierSymbolEntry *>(operands[0]->getEntry())->isGlobal())
     {
@@ -558,7 +557,8 @@ void BinaryInstruction::genMachineCode(AsmBuilder *builder)
         cur_block->InsertInst(cur_inst);
         src1 = new MachineOperand(*internal_reg);
     }
-    if ((opcode == MUL || opcode == DIV || opcode == MOD) && src2->isImm()) {
+    if ((opcode == MUL || opcode == DIV || opcode == MOD) && src2->isImm())
+    {
         auto internal_reg = genMachineVReg();
         cur_inst = new LoadMInstruction(cur_block, internal_reg, src2);
         cur_block->InsertInst(cur_inst);
@@ -585,13 +585,13 @@ void BinaryInstruction::genMachineCode(AsmBuilder *builder)
         cur_inst = new BinaryMInstruction(cur_block, BinaryMInstruction::OR, dst, src1, src2);
         break;
     case MOD:
-    // arm里没有模指令，要除乘减结合，来算余数
-    {
-        cur_block->InsertInst(new BinaryMInstruction(cur_block, BinaryMInstruction::DIV, dst, src1, src2));
-        cur_block->InsertInst(new BinaryMInstruction(cur_block, BinaryMInstruction::MUL, dst, dst, src2));
-        cur_inst = new BinaryMInstruction(cur_block, BinaryMInstruction::SUB, dst, src1, dst);
-    }
-    break;
+        // arm里没有模指令，要除乘减结合，来算余数
+        {
+            cur_block->InsertInst(new BinaryMInstruction(cur_block, BinaryMInstruction::DIV, dst, src1, src2));
+            cur_block->InsertInst(new BinaryMInstruction(cur_block, BinaryMInstruction::MUL, dst, dst, src2));
+            cur_inst = new BinaryMInstruction(cur_block, BinaryMInstruction::SUB, dst, src1, dst);
+        }
+        break;
     default:
         break;
     }
@@ -601,20 +601,104 @@ void BinaryInstruction::genMachineCode(AsmBuilder *builder)
 void CmpInstruction::genMachineCode(AsmBuilder *builder)
 {
     // TODO
+    // 简简单单生成一条cmp指令就行
+    auto cur_block = builder->getBlock();
+    auto src1 = genMachineOperand(operands[1]);
+    auto src2 = genMachineOperand(operands[2]);
+    if (src1->isImm())
+    {
+        auto internal_reg = genMachineVReg();
+        cur_block->InsertInst(new MovMInstruction(cur_block, MovMInstruction::MOV, internal_reg, src1));
+        src1 = new MachineOperand(*internal_reg);
+    }
+    if (src2->isImm())
+    {
+        auto internal_reg = genMachineVReg();
+        cur_block->InsertInst(new MovMInstruction(cur_block, MovMInstruction::MOV, internal_reg, src2));
+        src2 = new MachineOperand(*internal_reg);
+    }
+    cur_block->InsertInst(new CmpMInstruction(cur_block, src1, src2));
+    // 这里借助builder向br指令传cond
+    int cmpOpCode = 0;
+    switch (opcode)
+    {
+    case E:
+        cmpOpCode = CmpMInstruction::EQ;
+        break;
+    case NE:
+        cmpOpCode = CmpMInstruction::NE;
+        break;
+    case L:
+        cmpOpCode = CmpMInstruction::LT;
+        break;
+    case LE:
+        cmpOpCode = CmpMInstruction::LE;
+        break;
+    case G:
+        cmpOpCode = CmpMInstruction::GT;
+        break;
+    case GE:
+        cmpOpCode = CmpMInstruction::GE;
+        break;
+    default:
+        break;
+    }
+    builder->setCmpOpcode(cmpOpCode);
 }
 
 void UncondBrInstruction::genMachineCode(AsmBuilder *builder)
 {
     // TODO
+    // 直接生成一条指令就行
+    auto cur_block = builder->getBlock();
+    cur_block->InsertInst(new BranchMInstruction(cur_block, BranchMInstruction::B, genMachineLabel(branch->getNo())));
 }
 
 void CondBrInstruction::genMachineCode(AsmBuilder *builder)
 {
     // TODO
+    // 生成两条指令
+    auto cur_block = builder->getBlock();
+    cur_block->InsertInst(new BranchMInstruction(cur_block, BranchMInstruction::B, genMachineLabel(true_branch->getNo()), builder->getCmpOpcode()));
+    cur_block->InsertInst(new BranchMInstruction(cur_block, BranchMInstruction::B, genMachineLabel(false_branch->getNo())));
 }
 
 void CallInstruction::genMachineCode(AsmBuilder *builder)
 {
+    auto cur_block = builder->getBlock();
+    for (long unsigned int i = 1; i <= operands.size() - 1 && i <= 4; i++)
+    {
+        // 前四个参数用r0-r3传
+        auto param = genMachineOperand(operands[i]);
+        // 用mov指令把参数放到对应寄存器里
+        cur_block->InsertInst(new MovMInstruction(cur_block, MovMInstruction::MOV, genMachineReg(i - 1), param));
+    }
+    int param_size_in_stack = 0;
+    for (long unsigned int i = operands.size() - 1; i >= 5; i--)
+    {
+        // 参数个数大于4，要push了，从右向左push
+        auto param = genMachineOperand(operands[i]);
+        if (param->isImm())
+        {
+            auto internal_reg = genMachineVReg();
+            cur_block->InsertInst(new MovMInstruction(cur_block, MovMInstruction::MOV, internal_reg, param));
+            param = new MachineOperand(*internal_reg);
+        }
+        cur_block->InsertInst(new StackMInstrcuton(cur_block, StackMInstrcuton::PUSH, {param}));
+        param_size_in_stack += 4;
+    }
+    // 生成bl指令，调用函数
+    cur_block->InsertInst(new BranchMInstruction(cur_block, BranchMInstruction::BL, new MachineOperand(func->toStr().c_str())));
+    // 生成add指令释放栈空间
+    if (param_size_in_stack > 0)
+    {
+        auto sp = genMachineReg(13);
+        cur_block->InsertInst(new BinaryMInstruction(cur_block, BinaryMInstruction::ADD, sp, sp, genMachineImm(param_size_in_stack)));
+    }
+    if (operands[0])
+    {
+        cur_block->InsertInst(new MovMInstruction(cur_block, MovMInstruction::MOV, genMachineOperand(operands[0]), genMachineReg(0)));
+    }
 }
 
 void RetInstruction::genMachineCode(AsmBuilder *builder)
@@ -637,6 +721,10 @@ void RetInstruction::genMachineCode(AsmBuilder *builder)
     {
         cur_bb->InsertInst(new BinaryMInstruction(cur_bb, BinaryMInstruction::ADD, sp, sp, genMachineImm(stack_size)));
     }
+    // 恢复保存的寄存器，这里还不知道，先欠着
+    auto cur_inst = new StackMInstrcuton(cur_bb, StackMInstrcuton::POP, {});
+    cur_bb->InsertInst(cur_inst);
+    cur_bb->addPop(cur_inst);
     // bx指令
     cur_bb->InsertInst(new BranchMInstruction(cur_bb, BranchMInstruction::BX, genMachineReg(14)));
 }
