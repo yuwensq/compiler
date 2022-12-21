@@ -47,13 +47,16 @@ std::string ConstantSymbolEntry::toStr()
     return buffer.str();
 }
 
-IdentifierSymbolEntry::IdentifierSymbolEntry(Type *type, std::string name, int scope, bool sysy) : SymbolEntry(type, SymbolEntry::VARIABLE), name(name), sysy(sysy)
+IdentifierSymbolEntry::IdentifierSymbolEntry(Type *type, std::string name, int scope, bool sysy, int argNum) : SymbolEntry(type, SymbolEntry::VARIABLE), name(name), sysy(sysy)
 {
     this->scope = scope;
     // 如果是param，留一个Operand作为参数
     if (scope == PARAM)
     {
-        argAddr = new Operand(new TemporarySymbolEntry(type, SymbolTable::getLabel()));
+        TemporarySymbolEntry *se = new TemporarySymbolEntry(type, SymbolTable::getLabel());
+        se->setIsParam(true);
+        se->setArgNum(argNum);
+        argAddr = new Operand(se);
     }
     addr = nullptr;
 }

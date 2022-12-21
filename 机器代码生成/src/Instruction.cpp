@@ -407,7 +407,20 @@ MachineOperand *Instruction::genMachineOperand(Operand *ope)
     if (se->isConstant())
         mope = new MachineOperand(MachineOperand::IMM, dynamic_cast<ConstantSymbolEntry *>(se)->getValue());
     else if (se->isTemporary())
-        mope = new MachineOperand(MachineOperand::VREG, dynamic_cast<TemporarySymbolEntry *>(se)->getLabel());
+    {
+        if (((TemporarySymbolEntry *)se)->isParam())
+        {
+            int argNum = dynamic_cast<TemporarySymbolEntry *>(se)->getArgNum();
+            if (argNum < 4)
+            {
+                mope = new MachineOperand(MachineOperand::REG, argNum);
+            }
+        }
+        else
+        {
+            mope = new MachineOperand(MachineOperand::VREG, dynamic_cast<TemporarySymbolEntry *>(se)->getLabel());
+        }
+    }
     else if (se->isVariable())
     {
         auto id_se = dynamic_cast<IdentifierSymbolEntry *>(se);
@@ -588,8 +601,8 @@ void BinaryInstruction::genMachineCode(AsmBuilder *builder)
         // arm里没有模指令，要除乘减结合，来算余数
         {
             cur_block->InsertInst(new BinaryMInstruction(cur_block, BinaryMInstruction::DIV, dst, src1, src2));
-            cur_block->InsertInst(new BinaryMInstruction(cur_block, BinaryMInstruction::MUL, dst, dst, src2));
-            cur_inst = new BinaryMInstruction(cur_block, BinaryMInstruction::SUB, dst, src1, dst);
+            cur_block->InsertInst(new BinaryMInstruction(cur_block, BinaryMInstruction::MUL, new MachineOperand(*dst), new MachineOperand(*dst), new MachineOperand(*src2)));
+            cur_inst = new BinaryMInstruction(cur_block, BinaryMInstruction::SUB, new MachineOperand(*dst), new MachineOperand(*src1), new MachineOperand(*dst));
         }
         break;
     default:
@@ -619,30 +632,51 @@ void CmpInstruction::genMachineCode(AsmBuilder *builder)
     }
     cur_block->InsertInst(new CmpMInstruction(cur_block, src1, src2));
     // 这里借助builder向br指令传cond
-    int cmpOpCode = 0;
+    int cmpOpCode = 0, minusOpCode = 0;
     switch (opcode)
     {
     case E:
+    {
         cmpOpCode = CmpMInstruction::EQ;
-        break;
+        minusOpCode = CmpMInstruction::NE;
+    }
+    break;
     case NE:
+    {
         cmpOpCode = CmpMInstruction::NE;
-        break;
+        minusOpCode = CmpMInstruction::EQ;
+    }
+    break;
     case L:
+    {
         cmpOpCode = CmpMInstruction::LT;
-        break;
+        minusOpCode = CmpMInstruction::GE;
+    }
+    break;
     case LE:
+    {
         cmpOpCode = CmpMInstruction::LE;
-        break;
+        minusOpCode = CmpMInstruction::GT;
+    }
+    break;
     case G:
+    {
         cmpOpCode = CmpMInstruction::GT;
-        break;
+        minusOpCode = CmpMInstruction::LE;
+    }
+    break;
     case GE:
+    {
         cmpOpCode = CmpMInstruction::GE;
-        break;
+        minusOpCode = CmpMInstruction::LT;
+    }
+    break;
     default:
         break;
     }
+    auto dst = genMachineOperand(operands[0]);
+    cur_block->InsertInst(new MovMInstruction(cur_block, MovMInstruction::MOV, dst, genMachineImm(1), cmpOpCode));
+    cur_block->InsertInst(new MovMInstruction(cur_block, MovMInstruction::MOV, new MachineOperand(*dst), genMachineImm(0), minusOpCode));
     builder->setCmpOpcode(cmpOpCode);
 }
 
@@ -659,7 +693,9 @@ void CondBrInstruction::genMachineCode(AsmBuilder *builder)
     // TODO
     // 生成两条指令
     auto cur_block = builder->getBlock();
-    cur_block->InsertInst(new BranchMInstruction(cur_block, BranchMInstruction::B, genMachineLabel(true_branch->getNo()), builder->getCmpOpcode()));
+    auto src = genMachineOperand(operands[0]);
+    cur_block->InsertInst(new CmpMInstruction(cur_block, src, genMachineImm(0)));
+    cur_block->InsertInst(new BranchMInstruction(cur_block, BranchMInstruction::B, genMachineLabel(true_branch->getNo()), CmpMInstruction::NE));
     cur_block->InsertInst(new BranchMInstruction(cur_block, BranchMInstruction::B, genMachineLabel(false_branch->getNo())));
 }
 
@@ -731,8 +767,19 @@ void RetInstruction::genMachineCode(AsmBuilder *builder)
 
 void XorInstruction::genMachineCode(AsmBuilder *builder)
 {
+    auto cur_block = builder->getBlock();
+    auto dst = genMachineOperand(operands[0]);
+    auto src = genMachineOperand(operands[1]);
+    cur_block->InsertInst(new CmpMInstruction(cur_block, src, genMachineImm(0)));
+    cur_block->InsertInst(new MovMInstruction(cur_block, MovMInstruction::MOV, dst, genMachineImm(1), CmpMInstruction::EQ));
+    cur_block->InsertInst(new MovMInstruction(cur_block, MovMInstruction::MOV, new MachineOperand(*dst), genMachineImm(0), CmpMInstruction::NE));
 }
 
 void ZextInstruction::genMachineCode(AsmBuilder *builder)
 {
+    // 生成一条mov指令得了
+    auto cur_block = builder->getBlock();
+    auto dst = genMachineOperand(operands[0]);
+    auto src = genMachineOperand(operands[1]);
+    cur_block->InsertInst(new MovMInstruction(cur_block, MovMInstruction::MOV, dst, src));
 }

@@ -122,7 +122,7 @@ private:
     // You can add any field you need here.
 
 public:
-    IdentifierSymbolEntry(Type *type, std::string name, int scope, bool sysy = false);
+    IdentifierSymbolEntry(Type *type, std::string name, int scope, bool sysy = false, int argNum = 0);
     virtual ~IdentifierSymbolEntry(){};
     std::string toStr();
     bool isGlobal() const { return scope == GLOBAL; };
@@ -163,6 +163,8 @@ class TemporarySymbolEntry : public SymbolEntry
 private:
     int stack_offset;
     int label;
+    int argNum;
+    bool isPara;
 
 public:
     TemporarySymbolEntry(Type *type, int label);
@@ -170,6 +172,10 @@ public:
     std::string toStr();
     int getLabel() const { return label; };
     void setOffset(int offset) { this->stack_offset = offset; };
+    void setIsParam(bool pa) { this->isPara = pa; };
+    bool isParam() { return this->isPara; };
+    void setArgNum(int argNum) { this->argNum = argNum; };
+    int getArgNum() { return this->argNum; };
     int getOffset() { return this->stack_offset; };
     // You can add any function you need here.
 };

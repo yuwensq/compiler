@@ -211,7 +211,8 @@ void LinearScan::expireOldIntervals(Interval *interval)
         }
         regs.push_back(actInterval->rreg);
         it = active.erase(it);
-    }
+    } 
+    sort(regs.begin(), regs.end());
 }
 
 void LinearScan::spillAtInterval(Interval *interval)

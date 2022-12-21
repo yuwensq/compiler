@@ -10,6 +10,7 @@
     int yyerror(char const*);
     std::stack<StmtNode*> whileStack;
     Type *recentFuncRetType;
+    int argNum = 0;
 }
 
 %code requires {
@@ -394,6 +395,7 @@ FuncDef
     Type ID {
         recentFuncRetType = $1;
         identifiers = new SymbolTable(identifiers);
+        argNum = 0;
     }
     LPAREN FuncFParamsList RPAREN {
         Type* funcType;
@@ -431,7 +433,8 @@ FuncFParams
 FuncFParam
     : Type ID {
         SymbolEntry* se;
-        se = new IdentifierSymbolEntry($1, $2, identifiers->getLevel());
+        se = new IdentifierSymbolEntry($1, $2, identifiers->getLevel(), false, argNum);
+        argNum++;
         identifiers->install($2, se);
         $$ = new DeclStmt(new Id(se));
         delete []$2;
