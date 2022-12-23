@@ -400,7 +400,7 @@ void ZextInstruction::output() const
         fprintf(yyout, "  %s = zext i32 %s to i1\n", dst.c_str(), src.c_str());
     }
 }
-MachineOperand *Instruction::genMachineOperand(Operand *ope)
+MachineOperand *Instruction::genMachineOperand(Operand *ope, AsmBuilder *builder = nullptr)
 {
     auto se = ope->getEntry();
     MachineOperand *mope = nullptr;
@@ -408,12 +408,20 @@ MachineOperand *Instruction::genMachineOperand(Operand *ope)
         mope = new MachineOperand(MachineOperand::IMM, dynamic_cast<ConstantSymbolEntry *>(se)->getValue());
     else if (se->isTemporary())
     {
-        if (((TemporarySymbolEntry *)se)->isParam())
+        if (((TemporarySymbolEntry *)se)->isParam() && builder)
         {
             int argNum = dynamic_cast<TemporarySymbolEntry *>(se)->getArgNum();
             if (argNum < 4)
             {
                 mope = new MachineOperand(MachineOperand::REG, argNum);
+            }
+            else
+            { // 要从栈里加载
+                mope = new MachineOperand(MachineOperand::VREG, SymbolTable::getLabel());
+                auto cur_block = builder->getBlock();
+                auto cur_inst = new LoadMInstruction(cur_block, new MachineOperand(*mope), new MachineOperand(MachineOperand::REG, 11), new MachineOperand(MachineOperand::IMM, 4 * (argNum - 4)));
+                cur_block->InsertInst(cur_inst);
+                cur_block->addUInst(cur_inst);
             }
         }
         else
@@ -509,7 +517,7 @@ void StoreInstruction::genMachineCode(AsmBuilder *builder)
     // TODO
     auto cur_block = builder->getBlock();
     MachineInstruction *cur_inst = nullptr;
-    auto src = genMachineOperand(operands[1]);
+    auto src = genMachineOperand(operands[1], builder);
     if (src->isImm())
     {
         auto internal_reg = genMachineVReg();
@@ -751,16 +759,15 @@ void RetInstruction::genMachineCode(AsmBuilder *builder)
         cur_bb->InsertInst(new MovMInstruction(cur_bb, MovMInstruction::MOV, genMachineReg(0), genMachineOperand(operands[0])));
     }
     auto sp = genMachineReg(13);
-    // 释放栈空间
+    // 释放栈空间，这里也不知道，因为寄存器分配之后可能会溢出到栈里面，这里也先意思意思
     int stack_size = builder->getFunction()->AllocSpace(0);
-    if (stack_size > 0)
-    {
-        cur_bb->InsertInst(new BinaryMInstruction(cur_bb, BinaryMInstruction::ADD, sp, sp, genMachineImm(stack_size)));
-    }
-    // 恢复保存的寄存器，这里还不知道，先欠着
-    auto cur_inst = new StackMInstrcuton(cur_bb, StackMInstrcuton::POP, {});
+    auto cur_inst = new BinaryMInstruction(cur_bb, BinaryMInstruction::ADD, sp, sp, genMachineImm(stack_size));
     cur_bb->InsertInst(cur_inst);
-    cur_bb->addPop(cur_inst);
+    cur_bb->addUInst(cur_inst);
+    // 恢复保存的寄存器，这里还不知道，先欠着
+    auto curr_inst = new StackMInstrcuton(cur_bb, StackMInstrcuton::POP, {});
+    cur_bb->InsertInst(curr_inst);
+    cur_bb->addUInst(curr_inst);
     // bx指令
     cur_bb->InsertInst(new BranchMInstruction(cur_bb, BranchMInstruction::BX, genMachineReg(14)));
 }

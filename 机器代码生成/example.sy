@@ -1,11 +1,24 @@
-int a;
-int func(int p){
-	p = p - 1;
-	return p;
+int testParam8(int a0, int a1, int a2, int a3, int a4, int a5, int a6, int a7) {
+    return a0 - a1 + a2 - a3 + a4 + a5 + a6 + a7;
 }
-int main(){
-	int b;
-	a = 10;
-	b = func(a);
-	return b;
+
+int main() {
+    int a0;
+    int a1;
+    int a2;
+    int a3;
+    int a4;
+    int a5;
+    int a6;
+    int a7;
+    a0 = 0;
+    a1 = 1;
+    a2 = 2;
+    a3 = 3;
+    a4 = 4;
+    a5 = 5;
+    a6 = 6;
+    a7 = 7;
+	a0 = testParam8(a0, a1, a2, a3, a4, a5, a6, a7);
+   return 0;
 }

@@ -25,7 +25,7 @@ public:
     Instruction *getNext();
     Instruction *getPrev();
     virtual void output() const = 0;
-    MachineOperand *genMachineOperand(Operand *);
+    MachineOperand *genMachineOperand(Operand *, AsmBuilder *);
     MachineOperand *genMachineReg(int reg);
     MachineOperand *genMachineVReg();
     MachineOperand *genMachineImm(int val);

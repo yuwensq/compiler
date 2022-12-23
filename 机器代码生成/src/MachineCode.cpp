@@ -414,11 +414,16 @@ void MachineBlock::insertAfter(MachineInstruction *insertee, MachineInstruction 
     inst_list.insert(it, insertee);
 }
 
-void MachineBlock::backPatch(std::vector<MachineOperand *> saved_regs)
+void MachineBlock::backPatch(std::vector<MachineOperand *> saved_regs, int stack_size)
 {
-    for (auto inst : pops)
+    for (auto inst : unsure_insts)
     {
-        ((StackMInstrcuton *)inst)->setRegs(saved_regs);
+        if (inst->isStack())
+            ((StackMInstrcuton *)inst)->setRegs(saved_regs);
+        else if (inst->isLoad())
+            ((LoadMInstruction *)inst)->setOff(saved_regs.size() * 4);
+        else if (inst->isBinary())
+            ((BinaryMInstruction *)inst)->setStackSize(stack_size);
     }
 }
 
@@ -463,8 +468,9 @@ void MachineFunction::output()
     entry->insertFront(new BinaryMInstruction(entry, BinaryMInstruction::SUB, sp, sp, new MachineOperand(MachineOperand::IMM, stack_size)));
     entry->insertFront(new MovMInstruction(entry, MovMInstruction::MOV, fp, sp));
     entry->insertFront(new StackMInstrcuton(entry, StackMInstrcuton::PUSH, save_regs));
-    for (auto iter : block_list) {
-        iter->backPatch(save_regs);
+    for (auto iter : block_list)
+    {
+        iter->backPatch(save_regs, stack_size);
         iter->output();
     }
 }

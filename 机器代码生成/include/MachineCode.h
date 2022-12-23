@@ -104,6 +104,9 @@ public:
     std::vector<MachineOperand *> &getDef() { return def_list; };
     std::vector<MachineOperand *> &getUse() { return use_list; };
     MachineBlock *getParent() { return parent; };
+    bool isStack() { return type == STACK; };
+    bool isLoad() { return type == LOAD; };
+    bool isBinary() { return type == BINARY; };
 };
 
 class BinaryMInstruction : public MachineInstruction
@@ -121,6 +124,10 @@ public:
     BinaryMInstruction(MachineBlock *p, int op,
                        MachineOperand *dst, MachineOperand *src1, MachineOperand *src2,
                        int cond = MachineInstruction::NONE);
+    void setStackSize(int stack_size)
+    {
+        use_list[1] = new MachineOperand(MachineOperand::IMM, stack_size);
+    }
     void output();
 };
 
@@ -130,6 +137,10 @@ public:
     LoadMInstruction(MachineBlock *p,
                      MachineOperand *dst, MachineOperand *src1, MachineOperand *src2 = nullptr,
                      int cond = MachineInstruction::NONE);
+    void setOff(int offset)
+    {
+        use_list[1] = new MachineOperand(MachineOperand::IMM, use_list[1]->getVal() + offset);
+    }
     void output();
 };
 
@@ -209,7 +220,7 @@ private:
     int no;
     std::vector<MachineBlock *> pred, succ;
     std::vector<MachineInstruction *> inst_list;
-    std::vector<MachineInstruction *> pops;
+    std::vector<MachineInstruction *> unsure_insts;
     std::set<MachineOperand *> live_in;
     std::set<MachineOperand *> live_out;
 
@@ -230,8 +241,8 @@ public:
     void insertBefore(MachineInstruction *, MachineInstruction *);
     void insertAfter(MachineInstruction *, MachineInstruction *);
     void insertFront(MachineInstruction *inst) { this->inst_list.insert(inst_list.begin(), inst); };
-    void backPatch(std::vector<MachineOperand *>);
-    void addPop(MachineInstruction *inst) { pops.push_back(inst); };
+    void backPatch(std::vector<MachineOperand *>, int);
+    void addUInst(MachineInstruction *inst) { unsure_insts.push_back(inst); };
     std::set<MachineOperand *> &getLiveIn() { return live_in; };
     std::set<MachineOperand *> &getLiveOut() { return live_out; };
     std::vector<MachineBlock *> &getPreds() { return pred; };
