@@ -80,17 +80,6 @@ public:
     Type *getType() const { return valueType; };
 };
 
-class StringType : public Type
-{
-private:
-    int length;
-
-public:
-    StringType(int length) : Type(Type::STRING), length(length){};
-    int getLength() const { return length; };
-    std::string toStr();
-};
-
 class TypeSystem
 {
 private:

@@ -43,10 +43,3 @@ std::string PointerType::toStr()
     buffer << valueType->toStr() << "*";
     return buffer.str();
 }
-
-std::string StringType::toStr()
-{
-    std::ostringstream buffer;
-    buffer << "const char[" << length << "]";
-    return buffer.str();
-}

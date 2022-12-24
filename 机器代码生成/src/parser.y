@@ -29,7 +29,7 @@
 }
 
 %start Program
-%token <strtype> ID STRING
+%token <strtype> ID
 %token <itype> INTEGER
 %token IF ELSE WHILE
 %token INT VOID 
@@ -175,16 +175,6 @@ PrimaryExp
     }
     | LVal {
         $$ = $1;
-    }
-    | STRING {
-        SymbolEntry* se;
-        se = globals->lookup(std::string($1));
-        if(se == nullptr){
-            Type* type = new StringType(strlen($1));
-            se = new ConstantSymbolEntry(type, std::string($1));
-            globals->install(std::string($1), se);
-        }
-        $$ = new ExprNode(se);
     }
     | INTEGER {
         SymbolEntry* se = new ConstantSymbolEntry(TypeSystem::intType, $1);
