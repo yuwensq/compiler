@@ -437,6 +437,21 @@ void MachineBlock::backPatch(std::vector<MachineOperand *> saved_regs, int stack
                                           inst);
                 stackSize -= 16384;
             }
+            int ele = 16384;
+            while (stackSize > 256)
+            {
+                if (stackSize >= ele)
+                {
+                    father_block->insertAfter(new BinaryMInstruction(father_block,
+                                                                     BinaryMInstruction::ADD,
+                                                                     new MachineOperand(MachineOperand::REG, 13),
+                                                                     new MachineOperand(MachineOperand::REG, 13),
+                                                                     new MachineOperand(MachineOperand::IMM, ele)),
+                                              inst);
+                    stackSize -= ele;
+                }
+                ele /= 2;
+            }
             ((BinaryMInstruction *)inst)->setStackSize(stackSize);
         }
     }
@@ -482,13 +497,28 @@ void MachineFunction::output()
     save_regs.push_back(fp);
     save_regs.push_back(lr);
     int stackSize = stack_size;
+    // 关于arm的立即数大小，很奇怪
     while (stackSize > 16384)
     {
         // 由于立即数有大小限制，好像最大一次可以减16384，太大的分多次减
         entry->insertFront(new BinaryMInstruction(entry, BinaryMInstruction::SUB, sp, sp, new MachineOperand(MachineOperand::IMM, 16384)));
         stackSize -= 16384;
     }
-    entry->insertFront(new BinaryMInstruction(entry, BinaryMInstruction::SUB, sp, sp, new MachineOperand(MachineOperand::IMM, stackSize)));
+    // 剩下的一定小于等于16384，但是好像对于不是2的幂次的数，立即数最大能用255，这里我们拆成2的幂次
+    int ele = 16384;
+    while (stackSize > 256)
+    {
+        if (stackSize >= ele)
+        {
+            entry->insertFront(new BinaryMInstruction(entry, BinaryMInstruction::SUB, sp, sp, new MachineOperand(MachineOperand::IMM, ele)));
+            stackSize -= ele;
+        }
+        ele /= 2;
+    }
+    if (stackSize)
+    {
+        entry->insertFront(new BinaryMInstruction(entry, BinaryMInstruction::SUB, sp, sp, new MachineOperand(MachineOperand::IMM, stackSize)));
+    }
     entry->insertFront(new MovMInstruction(entry, MovMInstruction::MOV, fp, sp));
     entry->insertFront(new StackMInstrcuton(entry, StackMInstrcuton::PUSH, save_regs));
     for (auto iter : block_list)
@@ -545,10 +575,12 @@ void MachineUnit::PrintGlobalDecl()
             fprintf(yyout, "\t.word %d\n", ((IdentifierSymbolEntry *)se)->getValue());
         }
     }
-    if (arrayVar.size() > 0) {
-        //.comm symbol, length:在bss段申请一段命名空间,该段空间的名称叫symbol, 长度为length. 
-        //Ld 连接器在连接会为它留出空间.   
-        for (auto se : arrayVar) {
+    if (arrayVar.size() > 0)
+    {
+        //.comm symbol, length:在bss段申请一段命名空间,该段空间的名称叫symbol, 长度为length.
+        // Ld 连接器在连接会为它留出空间.
+        for (auto se : arrayVar)
+        {
             fprintf(yyout, ".comm %s, %d\n", se->toStr().c_str() + 1, se->getType()->getSize() / 8);
         }
     }

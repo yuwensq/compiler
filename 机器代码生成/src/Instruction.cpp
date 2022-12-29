@@ -655,13 +655,13 @@ void CmpInstruction::genMachineCode(AsmBuilder *builder)
     if (src1->isImm())
     {
         auto internal_reg = genMachineVReg();
-        cur_block->InsertInst(new MovMInstruction(cur_block, MovMInstruction::MOV, internal_reg, src1));
+        cur_block->InsertInst(new LoadMInstruction(cur_block, internal_reg, src1));
         src1 = new MachineOperand(*internal_reg);
     }
     if (src2->isImm())
     {
         auto internal_reg = genMachineVReg();
-        cur_block->InsertInst(new MovMInstruction(cur_block, MovMInstruction::MOV, internal_reg, src2));
+        cur_block->InsertInst(new LoadMInstruction(cur_block, internal_reg, src2));
         src2 = new MachineOperand(*internal_reg);
     }
     cur_block->InsertInst(new CmpMInstruction(cur_block, src1, src2));
@@ -855,13 +855,13 @@ void GepInstruction::genMachineCode(AsmBuilder *builder)
             step *= indexs[j];
         }
         auto off = genMachineVReg();
-        cur_block->InsertInst(new MovMInstruction(cur_block, MovMInstruction::MOV, off, genMachineImm(step)));
+        cur_block->InsertInst(new LoadMInstruction(cur_block, off, genMachineImm(step)));
         auto internal_reg1 = genMachineVReg();
         auto src1 = genMachineOperand(operands[i]);
         if (src1->isImm())
         {
             auto internal_reg = genMachineVReg();
-            cur_block->InsertInst(new MovMInstruction(cur_block, MovMInstruction::MOV, internal_reg, src1));
+            cur_block->InsertInst(new LoadMInstruction(cur_block, internal_reg, src1));
             src1 = new MachineOperand(*internal_reg);
         }
         cur_block->InsertInst(new BinaryMInstruction(cur_block, BinaryMInstruction::MUL, internal_reg1, src1, off));
