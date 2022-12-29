@@ -1,6 +1,7 @@
 #include "Instruction.h"
 #include "BasicBlock.h"
 #include <iostream>
+#include <cmath>
 #include "Function.h"
 #include "Type.h"
 #include "MachineCode.h"
@@ -469,7 +470,7 @@ void AllocaInstruction::genMachineCode(AsmBuilder *builder)
      * Allocate stack space for local variabel
      * Store frame offset in symbol entry */
     auto cur_func = builder->getFunction();
-    int offset = cur_func->AllocSpace(4);
+    int offset = cur_func->AllocSpace(se->getType()->getSize() / TypeSystem::intType->getSize() * 4);
     dynamic_cast<TemporarySymbolEntry *>(operands[0]->getEntry())->setOffset(-offset);
 }
 
@@ -497,9 +498,20 @@ void LoadInstruction::genMachineCode(AsmBuilder *builder)
         // example: load r1, [r0, #4]
         auto dst = genMachineOperand(operands[0]);
         auto src1 = genMachineReg(11);
-        auto src2 = genMachineImm(dynamic_cast<TemporarySymbolEntry *>(operands[1]->getEntry())->getOffset());
-        cur_inst = new LoadMInstruction(cur_block, dst, src1, src2);
-        cur_block->InsertInst(cur_inst);
+        int offset = dynamic_cast<TemporarySymbolEntry *>(operands[1]->getEntry())->getOffset();
+        auto src2 = genMachineImm(offset);
+        if (abs(offset) <= 16384)
+        {
+            cur_inst = new LoadMInstruction(cur_block, dst, src1, src2);
+            cur_block->InsertInst(cur_inst);
+        }
+        else
+        {
+            auto internal_reg = genMachineVReg();
+            cur_block->InsertInst(new LoadMInstruction(cur_block, internal_reg, src2));
+            cur_block->InsertInst(new BinaryMInstruction(cur_block, BinaryMInstruction::ADD, new MachineOperand(*internal_reg), new MachineOperand(*internal_reg), src1));
+            cur_block->InsertInst(new LoadMInstruction(cur_block, dst, new MachineOperand(*internal_reg)));
+        }
     }
     // Load operand from temporary variable
     else
@@ -543,16 +555,30 @@ void StoreInstruction::genMachineCode(AsmBuilder *builder)
     {
         // example: store r1, [r0, #4]
         auto dst = genMachineReg(11);
-        auto off = genMachineImm(dynamic_cast<TemporarySymbolEntry *>(operands[0]->getEntry())->getOffset());
-        cur_inst = new StoreMInstruction(cur_block, src, dst, off);
-        cur_block->InsertInst(cur_inst);
+        // auto off = genMachineImm(dynamic_cast<TemporarySymbolEntry *>(operands[0]->getEntry())->getOffset());
+        // cur_inst = new StoreMInstruction(cur_block, src, dst, off);
+        // cur_block->InsertInst(cur_inst);
+        int offset = dynamic_cast<TemporarySymbolEntry *>(operands[0]->getEntry())->getOffset();
+        auto off = genMachineImm(offset);
+        if (abs(offset) <= 16384)
+        {
+            cur_inst = new StoreMInstruction(cur_block, src, dst, off);
+            cur_block->InsertInst(cur_inst);
+        }
+        else
+        {
+            auto internal_reg = genMachineVReg();
+            cur_block->InsertInst(new LoadMInstruction(cur_block, internal_reg, off));
+            cur_block->InsertInst(new BinaryMInstruction(cur_block, BinaryMInstruction::ADD, new MachineOperand(*internal_reg), new MachineOperand(*internal_reg), dst));
+            cur_block->InsertInst(new StoreMInstruction(cur_block, src, new MachineOperand(*internal_reg)));
+        }
     }
     // Load operand from temporary variable
     else
     {
         // example: store r1, [r0]
         auto dst = genMachineOperand(operands[0]);
-        cur_inst = new LoadMInstruction(cur_block, src, dst);
+        cur_inst = new StoreMInstruction(cur_block, src, dst);
         cur_block->InsertInst(cur_inst);
     }
 }
@@ -578,7 +604,7 @@ void BinaryInstruction::genMachineCode(AsmBuilder *builder)
         cur_block->InsertInst(cur_inst);
         src1 = new MachineOperand(*internal_reg);
     }
-    if ((opcode == MUL || opcode == DIV || opcode == MOD) && src2->isImm())
+    if (src2->isImm())
     {
         auto internal_reg = genMachineVReg();
         cur_inst = new LoadMInstruction(cur_block, internal_reg, src2);
@@ -789,4 +815,96 @@ void ZextInstruction::genMachineCode(AsmBuilder *builder)
     auto dst = genMachineOperand(operands[0]);
     auto src = genMachineOperand(operands[1]);
     cur_block->InsertInst(new MovMInstruction(cur_block, MovMInstruction::MOV, dst, src));
+}
+
+void GepInstruction::genMachineCode(AsmBuilder *builder)
+{
+    // type2表示是不是通过传参传过来的数组指针，为true表示是，否则表示局部变量或者全局变量
+    auto cur_block = builder->getBlock();
+    auto dst = genMachineOperand(operands[0]);
+    auto base = type2 ? genMachineOperand(operands[1]) : genMachineVReg();
+    // 全局变量，先load
+    if (operands[1]->getEntry()->isVariable() && dynamic_cast<IdentifierSymbolEntry *>(operands[1]->getEntry())->isGlobal()) {
+        auto src = genMachineOperand(operands[1]);
+        cur_block->InsertInst(new LoadMInstruction(cur_block, base, src));
+        base = new MachineOperand(*base);
+    }
+    else if (!type2) // 局部变量
+    {
+        int offset = ((TemporarySymbolEntry *)operands[1]->getEntry())->getOffset();
+        if (abs(offset) <= 16384)
+        {
+            cur_block->InsertInst(new BinaryMInstruction(cur_block, BinaryMInstruction::ADD, base, genMachineReg(11), genMachineImm(offset)));
+            base = new MachineOperand(*base);
+        }
+        else
+        {
+            auto internal_reg = genMachineVReg();
+            cur_block->InsertInst(new LoadMInstruction(cur_block, internal_reg, genMachineImm(offset)));
+            cur_block->InsertInst(new BinaryMInstruction(cur_block, BinaryMInstruction::ADD, base, genMachineReg(11), new MachineOperand(*internal_reg)));
+            base = new MachineOperand(*base);
+        }
+    }
+    Type *arrType = ((PointerType *)operands[1]->getType())->getType();
+    std::vector<int> indexs = ((ArrayType *)arrType)->getIndexs();
+    for (unsigned long int i = 2; i < operands.size(); i++)
+    {
+        unsigned int step = 4;
+        for (unsigned long int j = i - (type2 ? 2 : 1); j < indexs.size(); j++)
+        {
+            step *= indexs[j];
+        }
+        auto off = genMachineVReg();
+        cur_block->InsertInst(new MovMInstruction(cur_block, MovMInstruction::MOV, off, genMachineImm(step)));
+        auto internal_reg1 = genMachineVReg();
+        auto src1 = genMachineOperand(operands[i]);
+        if (src1->isImm())
+        {
+            auto internal_reg = genMachineVReg();
+            cur_block->InsertInst(new MovMInstruction(cur_block, MovMInstruction::MOV, internal_reg, src1));
+            src1 = new MachineOperand(*internal_reg);
+        }
+        cur_block->InsertInst(new BinaryMInstruction(cur_block, BinaryMInstruction::MUL, internal_reg1, src1, off));
+        auto internal_reg2 = genMachineVReg();
+        cur_block->InsertInst(new BinaryMInstruction(cur_block, BinaryMInstruction::ADD, internal_reg2, new MachineOperand(*base), new MachineOperand(*internal_reg1)));
+        base = new MachineOperand(*internal_reg2);
+    }
+    cur_block->InsertInst(new MovMInstruction(cur_block, MovMInstruction::MOV, dst, base));
+}
+
+GepInstruction::GepInstruction(Operand *dst, Operand *base, std::vector<Operand *> offs, BasicBlock *insert_bb, bool type2) : Instruction(GEP, insert_bb), type2(type2)
+{
+    operands.push_back(dst);
+    operands.push_back(base);
+    dst->setDef(this);
+    base->addUse(this);
+    for (auto off : offs)
+    {
+        operands.push_back(off);
+        off->addUse(this);
+    }
+}
+
+void GepInstruction::output() const
+{
+    Operand *dst = operands[0];
+    Operand *base = operands[1];
+    std::string arrType = base->getType()->toStr();
+    if (!type2)
+    {
+        fprintf(yyout, "  %s = getelementptr inbounds %s, %s %s, i32 0",
+                dst->toStr().c_str(), arrType.substr(0, arrType.size() - 1).c_str(),
+                arrType.c_str(), base->toStr().c_str());
+    }
+    else
+    {
+        fprintf(yyout, "  %s = getelementptr inbounds %s, %s %s",
+                dst->toStr().c_str(), arrType.substr(0, arrType.size() - 1).c_str(),
+                arrType.c_str(), base->toStr().c_str());
+    }
+    for (unsigned long int i = 2; i < operands.size(); i++)
+    {
+        fprintf(yyout, ", i32 %s", operands[i]->toStr().c_str());
+    }
+    fprintf(yyout, "\n");
 }

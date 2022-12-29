@@ -51,7 +51,8 @@ protected:
         CMP,
         ALLOCA,
         XOR,
-        ZEXT
+        ZEXT,
+        GEP
     };
 };
 
@@ -201,6 +202,17 @@ public:
 
 private:
     bool b2i;
+};
+
+class GepInstruction : public Instruction
+{
+public:
+    GepInstruction(Operand *dst, Operand *base, std::vector<Operand *> offs, BasicBlock *insert_bb = nullptr, bool type2 = false);
+    void output() const;
+    void genMachineCode(AsmBuilder *);
+
+private:
+    bool type2 = false;
 };
 
 #endif

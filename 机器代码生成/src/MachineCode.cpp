@@ -1,5 +1,6 @@
 #include "MachineCode.h"
 #include "Type.h"
+#include <iostream>
 extern FILE *yyout;
 
 MachineOperand::MachineOperand(int tp, int val)
@@ -423,7 +424,21 @@ void MachineBlock::backPatch(std::vector<MachineOperand *> saved_regs, int stack
         else if (inst->isLoad())
             ((LoadMInstruction *)inst)->setOff(saved_regs.size() * 4);
         else if (inst->isBinary())
-            ((BinaryMInstruction *)inst)->setStackSize(stack_size);
+        {
+            int stackSize = stack_size;
+            auto father_block = inst->getParent();
+            while (stackSize > 16384)
+            {
+                father_block->insertAfter(new BinaryMInstruction(father_block,
+                                                                 BinaryMInstruction::ADD,
+                                                                 new MachineOperand(MachineOperand::REG, 13),
+                                                                 new MachineOperand(MachineOperand::REG, 13),
+                                                                 new MachineOperand(MachineOperand::IMM, 16384)),
+                                          inst);
+                stackSize -= 16384;
+            }
+            ((BinaryMInstruction *)inst)->setStackSize(stackSize);
+        }
     }
 }
 
@@ -446,7 +461,8 @@ std::vector<MachineOperand *> MachineFunction::getSavedRegs()
 
 void MachineFunction::output()
 {
-    const char *func_name = this->sym_ptr->toStr().c_str() + 1;
+    std::string funcName = this->sym_ptr->toStr() + "\0";
+    const char *func_name = funcName.c_str() + 1;
     fprintf(yyout, "\t.global %s\n", func_name);
     fprintf(yyout, "\t.type %s , %%function\n", func_name);
     fprintf(yyout, "%s:\n", func_name);
@@ -465,7 +481,14 @@ void MachineFunction::output()
     std::vector<MachineOperand *> save_regs = getSavedRegs();
     save_regs.push_back(fp);
     save_regs.push_back(lr);
-    entry->insertFront(new BinaryMInstruction(entry, BinaryMInstruction::SUB, sp, sp, new MachineOperand(MachineOperand::IMM, stack_size)));
+    int stackSize = stack_size;
+    while (stackSize > 16384)
+    {
+        // 由于立即数有大小限制，好像最大一次可以减16384，太大的分多次减
+        entry->insertFront(new BinaryMInstruction(entry, BinaryMInstruction::SUB, sp, sp, new MachineOperand(MachineOperand::IMM, 16384)));
+        stackSize -= 16384;
+    }
+    entry->insertFront(new BinaryMInstruction(entry, BinaryMInstruction::SUB, sp, sp, new MachineOperand(MachineOperand::IMM, stackSize)));
     entry->insertFront(new MovMInstruction(entry, MovMInstruction::MOV, fp, sp));
     entry->insertFront(new StackMInstrcuton(entry, StackMInstrcuton::PUSH, save_regs));
     for (auto iter : block_list)
@@ -482,11 +505,16 @@ void MachineUnit::PrintGlobalDecl()
     // 先把const的和不是const的给分开
     std::vector<SymbolEntry *> commonVar;
     std::vector<SymbolEntry *> constVar;
+    std::vector<SymbolEntry *> arrayVar;
     for (auto se : global_vars)
     {
-        if (((IntType *)se->getType())->isConst())
+        if (se->getType()->isInt() && ((IntType *)se->getType())->isConst())
         {
             constVar.push_back(se);
+        }
+        else if (se->getType()->isArray())
+        {
+            arrayVar.push_back(se);
         }
         else
         {
@@ -496,7 +524,7 @@ void MachineUnit::PrintGlobalDecl()
     // 不是const的放data区
     if (commonVar.size() > 0)
     {
-        fprintf(yyout, ".data\n\n");
+        fprintf(yyout, ".data\n");
         for (auto se : commonVar)
         {
             fprintf(yyout, ".global %s\n", se->toStr().c_str() + 1);
@@ -508,13 +536,20 @@ void MachineUnit::PrintGlobalDecl()
     // const的放只读区
     if (constVar.size() > 0)
     {
-        fprintf(yyout, ".section .rodata\n\n");
+        fprintf(yyout, ".section .rodata\n");
         for (auto se : constVar)
         {
             fprintf(yyout, ".global %s\n", se->toStr().c_str() + 1);
             fprintf(yyout, ".size %s, %d\n", se->toStr().c_str() + 1, se->getType()->getSize() / 8);
             fprintf(yyout, "%s:\n", se->toStr().c_str() + 1);
             fprintf(yyout, "\t.word %d\n", ((IdentifierSymbolEntry *)se)->getValue());
+        }
+    }
+    if (arrayVar.size() > 0) {
+        //.comm symbol, length:在bss段申请一段命名空间,该段空间的名称叫symbol, 长度为length. 
+        //Ld 连接器在连接会为它留出空间.   
+        for (auto se : arrayVar) {
+            fprintf(yyout, ".comm %s, %d\n", se->toStr().c_str() + 1, se->getType()->getSize() / 8);
         }
     }
 }

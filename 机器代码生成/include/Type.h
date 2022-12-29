@@ -16,7 +16,7 @@ protected:
         VOID,
         FUNC,
         PTR,
-        STRING
+        ARRAY
     };
     int size;
 
@@ -29,7 +29,7 @@ public:
     bool isVoid() const { return kind == VOID; };
     bool isFunc() const { return kind == FUNC; };
     bool isPtr() const { return kind == PTR; };
-    bool isString() const { return kind == STRING; };
+    bool isArray() const { return kind == ARRAY; };
     int getKind() const { return kind; };
     int getSize() const { return size; };
 };
@@ -75,9 +75,33 @@ private:
     Type *valueType;
 
 public:
-    PointerType(Type *valueType) : Type(Type::PTR) { this->valueType = valueType; };
+    PointerType(Type *valueType) : Type(Type::PTR)
+    {
+        this->valueType = valueType;
+        this->size = 32;
+    };
     std::string toStr();
     Type *getType() const { return valueType; };
+};
+
+class ArrayType : public Type
+{
+private:
+    // 数组的索引范围
+    std::vector<int> indexs;
+
+public:
+    ArrayType(std::vector<int> indexs) : Type(Type::ARRAY), indexs(indexs)
+    {
+        this->size = 1;
+        for (auto index : indexs)
+        {
+            this->size *= index;
+        }
+        this->size *= 32;
+    };
+    std::string toStr();
+    std::vector<int> getIndexs() { return indexs; };
 };
 
 class TypeSystem

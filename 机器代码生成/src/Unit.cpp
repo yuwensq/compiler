@@ -20,7 +20,14 @@ void Unit::output() const
     for (auto var : global_vars)
     {
         IdentifierSymbolEntry *se = (IdentifierSymbolEntry *)var;
-        fprintf(yyout, "%s = global %s %d, align 4\n", se->toStr().c_str(), se->getType()->toStr().c_str(), se->getValue());
+        if (!se->getType()->isArray())
+        {
+            fprintf(yyout, "%s = global %s %d, align 4\n", se->toStr().c_str(), se->getType()->toStr().c_str(), se->getValue());
+        }
+        else
+        {
+            fprintf(yyout, "%s = global %s zeroinitializer, align 4\n", se->toStr().c_str(), se->getType()->toStr().c_str());
+        }
     }
     // 再打印函数
     for (auto &func : func_list)
@@ -36,9 +43,9 @@ void Unit::output() const
     }
 }
 
-void Unit::genMachineCode(MachineUnit* munit) 
+void Unit::genMachineCode(MachineUnit *munit)
 {
-    AsmBuilder* builder = new AsmBuilder();
+    AsmBuilder *builder = new AsmBuilder();
     builder->setUnit(munit);
     munit->setGlobalVars(this->global_vars);
     for (auto &func : func_list)

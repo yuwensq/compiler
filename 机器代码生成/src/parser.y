@@ -39,7 +39,7 @@
 %token RETURN CONTINUE BREAK
 
 %type<stmttype> Stmts Stmt AssignStmt ExprStmt BlockStmt IfStmt WhileStmt BreakStmt ContinueStmt ReturnStmt DeclStmt FuncDef ConstDeclStmt VarDeclStmt ConstDefList VarDef ConstDef VarDefList FuncFParam FuncFParams FuncFParamsList BlankStmt
-%type<exprtype> Exp AddExp Cond LOrExp PrimaryExp LVal RelExp LAndExp MulExp ConstExp EqExp UnaryExp InitVal ConstInitVal FuncRParams FuncRParamsList
+%type<exprtype> Exp AddExp Cond LOrExp PrimaryExp LVal RelExp LAndExp MulExp ConstExp EqExp UnaryExp InitVal ConstInitVal FuncRParams FuncRParamsList ArrayIndices
 %type<type> Type
 
 %precedence THEN
@@ -80,6 +80,11 @@ LVal
             assert(se != nullptr);
         }
         $$ = new Id(se);
+        delete []$1;
+    }
+    | ID ArrayIndices {
+        SymbolEntry* se = identifiers->lookup($1);
+        $$ = new Id(se, $2);
         delete []$1;
     }
     ; 
@@ -341,6 +346,36 @@ VarDef
         $$ = new DeclStmt(new Id(se), $3);
         delete []$1;
     }
+    | ID ArrayIndices {
+        // 这里先不识别数组初始化（因为不会）
+        SymbolEntry* se;
+        se = identifiers->lookup($1, true);
+        if (se != nullptr) { //重复定义了
+            fprintf(stderr, "variable \"%s\" is repeated declared\n", (char*)$1);
+            delete []$1;
+            assert(se == nullptr);
+        }
+        ExprNode *expr = $2;
+        std::vector<int> indexs;
+        while (expr) {
+            indexs.push_back(expr->getValue());
+            expr = (ExprNode*)expr->getNext();
+        }
+        Type *arrType = new ArrayType(indexs);
+        se = new IdentifierSymbolEntry(arrType, $1, identifiers->getLevel());
+        identifiers->install($1, se);
+        $$ = new DeclStmt(new Id(se));
+        delete []$1;
+    }
+    ;
+ArrayIndices
+    : LBRACKET ConstExp RBRACKET {
+        $$ = $2; 
+    }
+    | ArrayIndices LBRACKET ConstExp RBRACKET {
+        $$ = $1;
+        $$->setNext($3);
+    }
     ;
 ConstDeclStmt
     : CONST Type ConstDefList SEMICOLON {
@@ -424,6 +459,28 @@ FuncFParam
     : Type ID {
         SymbolEntry* se;
         se = new IdentifierSymbolEntry($1, $2, identifiers->getLevel(), false, argNum);
+        argNum++;
+        identifiers->install($2, se);
+        $$ = new DeclStmt(new Id(se));
+        delete []$2;
+    }
+    | Type ID LBRACKET RBRACKET {
+        SymbolEntry* se;
+        se = new IdentifierSymbolEntry(new PointerType(new ArrayType({})), $2, identifiers->getLevel(), false, argNum);
+        argNum++;
+        identifiers->install($2, se);
+        $$ = new DeclStmt(new Id(se));
+        delete []$2;
+    }
+    | Type ID LBRACKET RBRACKET ArrayIndices {
+        std::vector<int> indexs;
+        ExprNode *expr = $5;
+        while (expr) {
+            indexs.push_back(expr->getValue());
+            expr = (ExprNode*)expr->getNext();
+        }
+        SymbolEntry* se;
+        se = new IdentifierSymbolEntry(new PointerType(new ArrayType(indexs)), $2, identifiers->getLevel(), false, argNum);
         argNum++;
         identifiers->install($2, se);
         $$ = new DeclStmt(new Id(se));

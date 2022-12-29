@@ -139,16 +139,56 @@ public:
 
 class Id : public ExprNode
 {
+private:
+    ExprNode *index;
+
 public:
-    Id(SymbolEntry *se) : ExprNode(se)
+    Id(SymbolEntry *se, ExprNode *index = nullptr) : ExprNode(se), index(index)
     {
         this->type = se->getType();
-        SymbolEntry *temp = new TemporarySymbolEntry(se->getType(), SymbolTable::getLabel());
-        dst = new Operand(temp);
+        if (se->getType()->isArray())
+        {
+            std::vector<int> indexs = ((ArrayType *)se->getType())->getIndexs();
+            SymbolEntry *temp;
+            if (index == nullptr) // 索引为空，引用数组指针
+            {
+                indexs.erase(indexs.begin());
+                this->type = new PointerType(new ArrayType(indexs));
+                temp = new TemporarySymbolEntry(this->type, SymbolTable::getLabel());
+            }
+            else
+            { // 索引不为空，应该引用的是数组中的某个元素
+                this->type = TypeSystem::intType;
+                temp = new TemporarySymbolEntry(TypeSystem::intType, SymbolTable::getLabel());
+            }
+            dst = new Operand(temp);
+        }
+        else if (se->getType()->isPtr())
+        {
+            SymbolEntry *temp;
+            if (index == nullptr)
+            {
+                this->type = se->getType();
+                temp = new TemporarySymbolEntry(se->getType(), SymbolTable::getLabel());
+            }
+            else
+            {
+                this->type = TypeSystem::intType;
+                temp = new TemporarySymbolEntry(TypeSystem::intType, SymbolTable::getLabel());
+            }
+            dst = new Operand(temp);
+        }
+        else
+        {
+            this->type = TypeSystem::intType;
+            SymbolEntry *temp = new TemporarySymbolEntry(TypeSystem::intType, SymbolTable::getLabel());
+            dst = new Operand(temp);
+        }
     };
     void output(int level);
     void typeCheck();
     void genCode();
+    ExprNode *getIndex() { return index; };
     int getValue();
 };
 

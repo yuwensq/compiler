@@ -1,4 +1,6 @@
 #include "Type.h"
+#include <assert.h>
+#include <string>
 #include <sstream>
 
 IntType TypeSystem::commonInt = IntType(32);
@@ -41,5 +43,21 @@ std::string PointerType::toStr()
 {
     std::ostringstream buffer;
     buffer << valueType->toStr() << "*";
+    return buffer.str();
+}
+
+std::string ArrayType::toStr()
+{
+    std::ostringstream buffer;
+    for (auto index : indexs)
+    {
+        buffer << "[" << index << " x ";
+    }
+    // 结束的时候，tmp应该是基本类型
+    buffer << "i32";
+    for (unsigned long int i = 0; i < indexs.size(); i++)
+    {
+        buffer << "]";
+    }
     return buffer.str();
 }

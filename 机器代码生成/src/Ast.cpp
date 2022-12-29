@@ -227,7 +227,7 @@ CallExpr::CallExpr(SymbolEntry *se, ExprNode *param) : ExprNode(se), param(param
 {
     dst = nullptr;
     // 统计实参数量
-    int paramCnt = 0;
+    unsigned long int paramCnt = 0;
     ExprNode *temp = param;
     while (temp)
     {
@@ -267,10 +267,10 @@ CallExpr::CallExpr(SymbolEntry *se, ExprNode *param) : ExprNode(se), param(param
                 fprintf(stderr, "too few arguments to function %s %s\n", symbolEntry->toStr().c_str(), type->toStr().c_str());
                 break;
             }
-            else if ((*it)->getKind() != temp->getType()->getKind())
-            {
-                fprintf(stderr, "parameter's type %s can't convert to %s\n", temp->getType()->toStr().c_str(), (*it)->toStr().c_str());
-            }
+            // else if ((*it)->getKind() != temp->getType()->getKind())
+            // {
+            //     fprintf(stderr, "parameter's type %s can't convert to %s\n", temp->getType()->toStr().c_str(), (*it)->toStr().c_str());
+            // }
             temp = (ExprNode *)(temp->getNext());
         }
         if (temp != nullptr)
@@ -360,11 +360,11 @@ AssignStmt::AssignStmt(ExprNode *lval, ExprNode *expr) : lval(lval), expr(expr)
             flag = false;
         }
     }
-    if (flag && !expr->getType()->isInt())
-    {
-        fprintf(stderr, "cannot initialize a variable of type \'int\' with an rvalue of type \'%s\'\n",
-                expr->getType()->toStr().c_str());
-    }
+    // if (flag && !expr->getType()->isInt())
+    // {
+    //     fprintf(stderr, "cannot initialize a variable of type \'int\' with an rvalue of type \'%s\'\n",
+    //             expr->getType()->toStr().c_str());
+    // }
 }
 
 // -----------只因Code代码区------------------
@@ -498,7 +498,52 @@ void Constant::genCode()
 
 void Id::genCode()
 {
-    Operand *addr = dynamic_cast<IdentifierSymbolEntry *>(symbolEntry)->getAddr();
+    IdentifierSymbolEntry *se = (IdentifierSymbolEntry *)symbolEntry;
+    Operand *addr = se->getAddr();
+    if (se->getType()->isArray())
+    {
+        // 先算地址
+        ExprNode *tmp = index;
+        std::vector<Operand *> offs;
+        if (tmp == nullptr)
+        {
+            // 如果数组标识符没有索引，他应该是作为参数传递的，取数组指针就行
+            // 生成一条gep指令返回就行
+            offs.push_back(new Operand(new ConstantSymbolEntry(TypeSystem::intType, 0)));
+            new GepInstruction(dst, addr, offs, now_bb);
+            return;
+        }
+        while (tmp)
+        {
+            tmp->genCode();
+            offs.push_back(tmp->getOperand());
+            tmp = (ExprNode *)tmp->getNext();
+        }
+        addr = new Operand(new TemporarySymbolEntry(new PointerType(TypeSystem::intType), SymbolTable::getLabel()));
+        new GepInstruction(addr, se->getAddr(), offs, now_bb);
+    }
+    else if (se->getType()->isPtr())
+    {
+        ExprNode *tmp = index;
+        if (tmp == nullptr)
+        {
+            // 如果数组标识符没有索引，他应该是作为参数传递的，取数组指针就行
+            // 生成一条gep指令返回就行
+            new LoadInstruction(dst, addr, now_bb);
+            return;
+        }
+        Operand *base = new Operand(new TemporarySymbolEntry(((PointerType *)(addr->getType()))->getType(), SymbolTable::getLabel()));
+        new LoadInstruction(base, addr, now_bb);
+        std::vector<Operand *> offs;
+        while (tmp)
+        {
+            tmp->genCode();
+            offs.push_back(tmp->getOperand());
+            tmp = (ExprNode *)tmp->getNext();
+        }
+        addr = new Operand(new TemporarySymbolEntry(new PointerType(TypeSystem::intType), SymbolTable::getLabel()));
+        new GepInstruction(addr, base, offs, now_bb, true);
+    }
     new LoadInstruction(dst, addr, now_bb);
 }
 
@@ -685,13 +730,43 @@ void ReturnStmt::genCode()
 
 void AssignStmt::genCode()
 {
+    IdentifierSymbolEntry *se = (IdentifierSymbolEntry *)lval->getSymPtr();
     expr->genCode();
-    Operand *addr = dynamic_cast<IdentifierSymbolEntry *>(lval->getSymPtr())->getAddr();
+    Operand *addr = se->getAddr();
     Operand *src = expr->getOperand();
     /***
      * We haven't implemented array yet, the lval can only be ID. So we just store the result of the `expr` to the addr of the id.
      * If you want to implement array, you have to caculate the address first and then store the result into it.
      */
+    if (se->getType()->isArray())
+    {
+        // 先算地址
+        ExprNode *index = ((Id *)lval)->getIndex();
+        std::vector<Operand *> offs;
+        while (index)
+        {
+            index->genCode();
+            offs.push_back(index->getOperand());
+            index = (ExprNode *)index->getNext();
+        }
+        addr = new Operand(new TemporarySymbolEntry(new PointerType(TypeSystem::intType), SymbolTable::getLabel()));
+        new GepInstruction(addr, se->getAddr(), offs, now_bb);
+    }
+    else if (se->getType()->isPtr())
+    {
+        Operand *base = new Operand(new TemporarySymbolEntry(((PointerType *)(addr->getType()))->getType(), SymbolTable::getLabel()));
+        new LoadInstruction(base, addr, now_bb);
+        ExprNode *tmp = ((Id *)lval)->getIndex();
+        std::vector<Operand *> offs;
+        while (tmp)
+        {
+            tmp->genCode();
+            offs.push_back(tmp->getOperand());
+            tmp = (ExprNode *)tmp->getNext();
+        }
+        addr = new Operand(new TemporarySymbolEntry(new PointerType(TypeSystem::intType), SymbolTable::getLabel()));
+        new GepInstruction(addr, base, offs, now_bb, true);
+    }
     new StoreInstruction(addr, src, now_bb);
 }
 
