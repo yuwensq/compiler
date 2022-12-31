@@ -1,7 +1,7 @@
 %code top{
+    #include "parser.h"
     #include <iostream>
     #include <assert.h>
-    #include "parser.h"
     #include <stack>
     #include <cstring>
     extern Ast ast;
@@ -10,32 +10,34 @@
     int yyerror(char const*);
     std::stack<StmtNode*> whileStack;
     Type *recentFuncRetType;
-    int argNum = 0;
+    int argNum = 0; // 这个记录的是当前函数参数是第几个参数，因为前四个参数用寄存器存，之后的参数用栈传递
+    std::stack<std::vector<int>> dimesionStack; // 维度栈
+    ExprNode **initArray = nullptr; // 这个存储当前数组的初始化数组的基地址
+    int idx; // 这个是上边那个initArray的索引
 }
 
 %code requires {
     #include "Ast.h"
-    #include "SymbolTable.h"
     #include "Type.h"
+    #include "SymbolTable.h"
 }
 
 %union {
-    int itype;
+    int inttype;
     char* strtype;
-    StmtNode* stmttype;
-    ExprNode* exprtype;
     Type* type;
     SymbolEntry* se;
+    ExprNode* exprtype;
+    StmtNode* stmttype;
 }
 
 %start Program
 %token <strtype> ID
-%token <itype> INTEGER
-%token IF ELSE WHILE
-%token INT VOID 
-%token LPAREN RPAREN LBRACE RBRACE SEMICOLON LBRACKET RBRACKET COMMA  
+%token <inttype> INTEGER
+%token INT VOID CONST
 %token ADD SUB MUL DIV MOD OR AND LESS LESSEQUAL GREATER GREATEREQUAL ASSIGN EQUAL NOTEQUAL NOT
-%token CONST
+%token IF ELSE WHILE
+%token LPAREN RPAREN LBRACE RBRACE LBRACKET RBRACKET COMMA SEMICOLON
 %token RETURN CONTINUE BREAK
 
 %type<stmttype> Stmts Stmt AssignStmt ExprStmt BlockStmt IfStmt WhileStmt BreakStmt ContinueStmt ReturnStmt DeclStmt FuncDef ConstDeclStmt VarDeclStmt ConstDefList VarDef ConstDef VarDefList FuncFParam FuncFParams FuncFParamsList BlankStmt
@@ -51,23 +53,23 @@ Program
     }
     ;
 Stmts
-    : Stmt {$$=$1;}
+    : Stmt { $$ = $1; }
     | Stmts Stmt{
         $$ = new SeqNode($1, $2);
     }
     ;
 Stmt
-    : AssignStmt {$$=$1;}
-    | ExprStmt {$$=$1;}
-    | BlockStmt {$$=$1;}
-    | BlankStmt {$$=$1;}
-    | IfStmt {$$=$1;}
-    | WhileStmt {$$=$1;}
-    | BreakStmt {$$=$1;}
-    | ContinueStmt {$$=$1;}
-    | ReturnStmt {$$=$1;}
-    | DeclStmt {$$=$1;}
-    | FuncDef {$$=$1;}
+    : AssignStmt { $$ = $1; }
+    | ExprStmt { $$ = $1; }
+    | BlockStmt { $$ = $1; }
+    | BlankStmt { $$ = $1; }
+    | IfStmt { $$ = $1; }
+    | WhileStmt { $$ = $1; }
+    | BreakStmt { $$ = $1; }
+    | ContinueStmt { $$ = $1; }
+    | ReturnStmt { $$ = $1; }
+    | DeclStmt { $$ = $1; }
+    | FuncDef { $$ = $1; }
     ;
 LVal
     : ID {
@@ -77,7 +79,7 @@ LVal
         {
             fprintf(stderr, "identifier \"%s\" is undefined\n", (char*)$1);
             delete []$1;
-            assert(se != nullptr);
+            exit(-1);
         }
         $$ = new Id(se);
         delete []$1;
@@ -367,6 +369,36 @@ VarDef
         $$ = new DeclStmt(new Id(se));
         delete []$1;
     }
+    | ID ArrayIndices ASSIGN {
+        SymbolEntry* se;
+        se = identifiers->lookup($1, true);
+        if (se != nullptr) { //重复定义了
+            fprintf(stderr, "variable \"%s\" is repeated declared\n", (char*)$1);
+            delete []$1;
+            assert(se == nullptr);
+        }
+        ExprNode *expr = $2;
+        std::vector<int> indexs;
+        while (expr) {
+            indexs.push_back(expr->getValue());
+            expr = (ExprNode*)expr->getNext();
+        }
+        Type *arrType = new ArrayType(indexs);
+        se = new IdentifierSymbolEntry(arrType, $1, identifiers->getLevel());
+        $<se>$ = se;
+        identifiers->install($1, se);
+        initArray = new ExprNode*[arrType->getSize() / TypeSystem::intType->getSize()];
+        memset(initArray, 0, sizeof(ExprNode*) * (arrType->getSize() / TypeSystem::intType->getSize()));
+        idx = 0;
+        std::stack<std::vector<int>>().swap(dimesionStack); // 这一句的作用就是清空栈
+        dimesionStack.push(indexs);
+        delete []$1;
+    } InitVal {
+        $$ = new DeclStmt(new Id($<se>4));
+        ((DeclStmt*)$$)->setInitArray(initArray);
+        initArray = nullptr;
+        idx = 0;
+    }
     ;
 ArrayIndices
     : LBRACKET ConstExp RBRACKET {
@@ -404,16 +436,118 @@ ConstDef
         $$ = new DeclStmt(new Id(se), $3);
         delete []$1;
     }
+    | ID ArrayIndices ASSIGN {
+        SymbolEntry* se;
+        se = identifiers->lookup($1, true);
+        if (se != nullptr) { //重复定义了
+            fprintf(stderr, "variable \"%s\" is repeated declared\n", (char*)$1);
+            delete []$1;
+            assert(se == nullptr);
+        }
+        ExprNode *expr = $2;
+        std::vector<int> indexs;
+        while (expr) {
+            indexs.push_back(expr->getValue());
+            expr = (ExprNode*)expr->getNext();
+        }
+        Type *arrType = new ArrayType(indexs, TypeSystem::constIntType);
+        se = new IdentifierSymbolEntry(arrType, $1, identifiers->getLevel());
+        $<se>$ = se;
+        identifiers->install($1, se);
+        initArray = new ExprNode*[arrType->getSize() / TypeSystem::intType->getSize()];
+        memset(initArray, 0, sizeof(ExprNode*) * (arrType->getSize() / TypeSystem::intType->getSize()));
+        idx = 0;
+        std::stack<std::vector<int>>().swap(dimesionStack); // 这一句的作用就是清空栈
+        dimesionStack.push(indexs);
+        delete []$1;
+    } ConstInitVal {
+        $$ = new DeclStmt(new Id($<se>4));
+        ((DeclStmt*)$$)->setInitArray(initArray);
+        initArray = nullptr;
+        idx = 0;
+    }
     ;
 InitVal 
     : Exp {
         $$ = $1;
+        if (initArray != nullptr) {
+            initArray[idx++] = $1;
+        }
     }
+    | LBRACE RBRACE {
+        std::vector<int> dimesion = dimesionStack.top();
+        int size = 1;
+        for (auto dim : dimesion) {
+            size *= dim;
+        }
+        idx += size;
+    }
+    | LBRACE {
+        std::vector<int> dimesion = dimesionStack.top();
+        dimesionStack.push({-1, idx});
+        dimesion.erase(dimesion.begin());
+        if (dimesion.size() <= 0) {
+            dimesion.push_back(1);
+        }
+        dimesionStack.push(dimesion);
+    } InitValList RBRACE {
+        while (dimesionStack.top()[0] != -1) {
+            dimesionStack.pop();
+        }
+        idx = dimesionStack.top()[1];
+        dimesionStack.pop();
+        std::vector<int> dimesion = dimesionStack.top();
+        int size = 1;
+        for (auto dim : dimesion) {
+            size *= dim;
+        }
+        idx += size;
+    }
+    ;
+InitValList
+    : InitVal
+    | InitValList COMMA InitVal
     ;
 ConstInitVal
     : ConstExp {
         $$ = $1;
+        if (initArray != nullptr) {
+            initArray[idx++] = $1;
+        }
     }
+    | LBRACE RBRACE {
+        std::vector<int> dimesion = dimesionStack.top();
+        int size = 1;
+        for (auto dim : dimesion) {
+            size *= dim;
+        }
+        idx += size;
+    }
+    | LBRACE {
+        std::vector<int> dimesion = dimesionStack.top();
+        dimesionStack.push({-1, idx});
+        dimesion.erase(dimesion.begin());
+        if (dimesion.size() <= 0) {
+            dimesion.push_back(1);
+        }
+        dimesionStack.push(dimesion);
+    } ConstInitValList RBRACE {
+        while (dimesionStack.top()[0] != -1) {
+            dimesionStack.pop();
+        }
+        idx = dimesionStack.top()[1];
+        dimesionStack.pop();
+        std::vector<int> dimesion = dimesionStack.top();
+        int size = 1;
+        for (auto dim : dimesion) {
+            size *= dim;
+        }
+        idx += size;
+    }
+    ;
+ConstInitValList
+    : ConstInitVal
+    | ConstInitValList COMMA ConstInitVal
     ;
 FuncDef
     :

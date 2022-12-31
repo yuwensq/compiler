@@ -84,26 +84,6 @@ public:
     Type *getType() const { return valueType; };
 };
 
-class ArrayType : public Type
-{
-private:
-    // 数组的索引范围
-    std::vector<int> indexs;
-
-public:
-    ArrayType(std::vector<int> indexs) : Type(Type::ARRAY), indexs(indexs)
-    {
-        this->size = 1;
-        for (auto index : indexs)
-        {
-            this->size *= index;
-        }
-        this->size *= 32;
-    };
-    std::string toStr();
-    std::vector<int> getIndexs() { return indexs; };
-};
-
 class TypeSystem
 {
 private:
@@ -117,6 +97,28 @@ public:
     static Type *voidType;
     static Type *boolType;
     static Type *constIntType;
+};
+
+class ArrayType : public Type
+{
+private:
+    // 数组的索引范围
+    std::vector<int> indexs;
+    Type *baseType;
+
+public:
+    ArrayType(std::vector<int> indexs, Type *baseType = TypeSystem::intType) : Type(Type::ARRAY), indexs(indexs), baseType(baseType)
+    {
+        this->size = 1;
+        for (auto index : indexs)
+        {
+            this->size *= index;
+        }
+        this->size *= 32;
+    };
+    std::string toStr();
+    std::vector<int> getIndexs() { return indexs; };
+    bool isConst() { return ((IntType *)baseType)->isConst(); };
 };
 
 #endif

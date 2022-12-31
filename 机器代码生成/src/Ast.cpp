@@ -597,6 +597,23 @@ void DeclStmt::genCode()
         addr = new Operand(addr_se);
         se->setAddr(addr);
         unit.addGlobalVar(se);
+        if (se->getType()->isArray() && exprArray)
+        {
+            int size = se->getType()->getSize() / TypeSystem::intType->getSize();
+            int *arrayValue = new int[size];
+            se->setArrayValue(arrayValue);
+            for (int i = 0; i < size; i++)
+            {
+                if (exprArray[i])
+                {
+                    arrayValue[i] = exprArray[i]->getValue();
+                }
+                else
+                {
+                    arrayValue[i] = 0;
+                }
+            }
+        }
     }
     else
     {
@@ -616,6 +633,41 @@ void DeclStmt::genCode()
         {
             now_func->addParam(se->getArgAddr());
             new StoreInstruction(addr, se->getArgAddr(), now_bb);
+        }
+        if (se->getType()->isArray() && exprArray) // 如果数组有初始化
+        {
+            std::vector<int> indexs = ((ArrayType *)se->getType())->getIndexs();
+            int size = se->getType()->getSize() / TypeSystem::intType->getSize();
+            std::vector<Operand *> offs;
+            for (int j = 0; j < indexs.size(); j++) {
+                offs.push_back(new Operand(new ConstantSymbolEntry(TypeSystem::intType, 0)));
+            }
+            // 因为数组初始化可能会用到很多零，这里我们先准备一个，然后之后就不用频繁load了
+            Operand *zeroReg = new Operand(new TemporarySymbolEntry(TypeSystem::intType, SymbolTable::getLabel()));
+            Operand *zero = new Operand(new ConstantSymbolEntry(TypeSystem::intType, 0));
+            new BinaryInstruction(BinaryInstruction::ADD, zeroReg, zero, zero, now_bb);
+            Operand *ele_addr = new Operand(new TemporarySymbolEntry(new PointerType(TypeSystem::intType), SymbolTable::getLabel()));
+            Operand *step = new Operand(new ConstantSymbolEntry(TypeSystem::intType, 4));
+            new GepInstruction(ele_addr, se->getAddr(), offs, now_bb);
+            for (int i = 0; i < size; i++)
+            {
+                if (exprArray[i])
+                {
+                    exprArray[i]->genCode();
+                    new StoreInstruction(ele_addr, exprArray[i]->getOperand(), now_bb);
+                }
+                else
+                {
+                    new StoreInstruction(ele_addr, zeroReg, now_bb);
+                }
+                new BinaryInstruction(BinaryInstruction::ADD, ele_addr, ele_addr, step, now_bb);
+            }
+            // for (int i = 0; i < size; i++) {
+            //     if (exprArray[i]) {
+            //         std::cout  << i << " " << exprArray[i]->getSymPtr()->toStr() << " ";
+            //     }
+            // }
+            // std::cout << std::endl;
         }
     }
     // 这里要看看下一个有没有

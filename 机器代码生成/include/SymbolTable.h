@@ -116,6 +116,7 @@ private:
     int label;
     bool initial;
     bool sysy;
+    int *arrayValue;
 
     Operand *addr; // The address of the identifier.
     Operand *argAddr;
@@ -137,6 +138,9 @@ public:
     int getValue() const { return value; };
     int getLabel() const { return label; };
     void setLabel() { label = SymbolTable::getLabel(); };
+    void setArrayValue(int *arrayValue) { this->arrayValue = arrayValue; };
+    int *getArrayValue() { return this->arrayValue; };
+    bool isInitial() { return (initial || arrayValue != nullptr); };
     // You can add any function you need here.
 };
 

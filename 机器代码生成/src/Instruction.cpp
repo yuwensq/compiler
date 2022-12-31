@@ -604,7 +604,7 @@ void BinaryInstruction::genMachineCode(AsmBuilder *builder)
         cur_block->InsertInst(cur_inst);
         src1 = new MachineOperand(*internal_reg);
     }
-    if (src2->isImm())
+    if (src2->isImm() && (abs(src2->getVal()) > 255 || opcode == MUL || opcode == DIV || opcode == MOD))
     {
         auto internal_reg = genMachineVReg();
         cur_inst = new LoadMInstruction(cur_block, internal_reg, src2);
@@ -824,7 +824,8 @@ void GepInstruction::genMachineCode(AsmBuilder *builder)
     auto dst = genMachineOperand(operands[0]);
     auto base = type2 ? genMachineOperand(operands[1]) : genMachineVReg();
     // 全局变量，先load
-    if (operands[1]->getEntry()->isVariable() && dynamic_cast<IdentifierSymbolEntry *>(operands[1]->getEntry())->isGlobal()) {
+    if (operands[1]->getEntry()->isVariable() && dynamic_cast<IdentifierSymbolEntry *>(operands[1]->getEntry())->isGlobal())
+    {
         auto src = genMachineOperand(operands[1]);
         cur_block->InsertInst(new LoadMInstruction(cur_block, base, src));
         base = new MachineOperand(*base);
@@ -832,7 +833,7 @@ void GepInstruction::genMachineCode(AsmBuilder *builder)
     else if (!type2) // 局部变量
     {
         int offset = ((TemporarySymbolEntry *)operands[1]->getEntry())->getOffset();
-        if (abs(offset) <= 16384)
+        if (abs(offset) <= 255)
         {
             cur_block->InsertInst(new BinaryMInstruction(cur_block, BinaryMInstruction::ADD, base, genMachineReg(11), genMachineImm(offset)));
             base = new MachineOperand(*base);
@@ -847,8 +848,15 @@ void GepInstruction::genMachineCode(AsmBuilder *builder)
     }
     Type *arrType = ((PointerType *)operands[1]->getType())->getType();
     std::vector<int> indexs = ((ArrayType *)arrType)->getIndexs();
+    std::vector<int> imms; // 这个专门用来记录索引中的立即数比如说a[10][i][3] 就存一个{0, 2}这样子
     for (unsigned long int i = 2; i < operands.size(); i++)
     {
+        if (operands[i]->getEntry()->isConstant())
+        {
+            // 为了省代码，所有的立即数一起算，这里先跳过
+            imms.push_back(i);
+            continue;
+        }
         unsigned int step = 4;
         for (unsigned long int j = i - (type2 ? 2 : 1); j < indexs.size(); j++)
         {
@@ -858,17 +866,55 @@ void GepInstruction::genMachineCode(AsmBuilder *builder)
         cur_block->InsertInst(new LoadMInstruction(cur_block, off, genMachineImm(step)));
         auto internal_reg1 = genMachineVReg();
         auto src1 = genMachineOperand(operands[i]);
-        if (src1->isImm())
-        {
-            auto internal_reg = genMachineVReg();
-            cur_block->InsertInst(new LoadMInstruction(cur_block, internal_reg, src1));
-            src1 = new MachineOperand(*internal_reg);
-        }
         cur_block->InsertInst(new BinaryMInstruction(cur_block, BinaryMInstruction::MUL, internal_reg1, src1, off));
         auto internal_reg2 = genMachineVReg();
         cur_block->InsertInst(new BinaryMInstruction(cur_block, BinaryMInstruction::ADD, internal_reg2, new MachineOperand(*base), new MachineOperand(*internal_reg1)));
         base = new MachineOperand(*internal_reg2);
     }
+    int off = 0;
+    for (auto index : imms)
+    {
+        int imm = ((ConstantSymbolEntry *)operands[index]->getEntry())->getValue();
+        unsigned int step = 4;
+        for (unsigned long int j = index - (type2 ? 2 : 1); j < indexs.size(); j++)
+        {
+            step *= indexs[j];
+        }
+        off += (imm * step);
+    }
+    if (off > 0)
+    {
+        auto internal_reg1 = genMachineImm(off);
+        if (abs(off) > 16384)
+        {
+            auto internal_reg2 = genMachineVReg();
+            cur_block->InsertInst(new LoadMInstruction(cur_block, internal_reg2, internal_reg1));
+            internal_reg1 = new MachineOperand(*internal_reg2);
+        }
+        cur_block->InsertInst(new BinaryMInstruction(cur_block, BinaryMInstruction::ADD, new MachineOperand(*base), new MachineOperand(*base), new MachineOperand(*internal_reg1)));
+    }
+    // for (unsigned long int i = 2; i < operands.size(); i++)
+    // {
+    //     unsigned int step = 4;
+    //     for (unsigned long int j = i - (type2 ? 2 : 1); j < indexs.size(); j++)
+    //     {
+    //         step *= indexs[j];
+    //     }
+    //     auto off = genMachineVReg();
+    //     cur_block->InsertInst(new LoadMInstruction(cur_block, off, genMachineImm(step)));
+    //     auto internal_reg1 = genMachineVReg();
+    //     auto src1 = genMachineOperand(operands[i]);
+    //     if (src1->isImm())
+    //     {
+    //         auto internal_reg = genMachineVReg();
+    //         cur_block->InsertInst(new LoadMInstruction(cur_block, internal_reg, src1));
+    //         src1 = new MachineOperand(*internal_reg);
+    //     }
+    //     cur_block->InsertInst(new BinaryMInstruction(cur_block, BinaryMInstruction::MUL, internal_reg1, src1, off));
+    //     auto internal_reg2 = genMachineVReg();
+    //     cur_block->InsertInst(new BinaryMInstruction(cur_block, BinaryMInstruction::ADD, internal_reg2, new MachineOperand(*base), new MachineOperand(*internal_reg1)));
+    //     base = new MachineOperand(*internal_reg2);
+    // }
     cur_block->InsertInst(new MovMInstruction(cur_block, MovMInstruction::MOV, dst, base));
 }
 

@@ -266,12 +266,14 @@ class DeclStmt : public StmtNode
 private:
     Id *id;
     ExprNode *expr;
+    ExprNode **exprArray; // 当Id是个数组的时候，这个东西用来存数据的初始值吧
 
 public:
-    DeclStmt(Id *id, ExprNode *expr = nullptr) : id(id), expr(expr){};
+    DeclStmt(Id *id, ExprNode *expr = nullptr) : id(id), expr(expr) { this->exprArray = nullptr; };
     void output(int level);
     void typeCheck();
     void genCode();
+    void setInitArray(ExprNode **exprArray) { this->exprArray = exprArray; };
     Id *getId() { return id; };
 };
 

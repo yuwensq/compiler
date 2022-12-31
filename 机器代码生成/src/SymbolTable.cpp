@@ -50,6 +50,7 @@ std::string ConstantSymbolEntry::toStr()
 IdentifierSymbolEntry::IdentifierSymbolEntry(Type *type, std::string name, int scope, bool sysy, int argNum) : SymbolEntry(type, SymbolEntry::VARIABLE), name(name), sysy(sysy)
 {
     this->scope = scope;
+    this->arrayValue = nullptr;
     // 如果是param，留一个Operand作为参数
     if (scope == PARAM)
     {

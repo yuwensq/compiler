@@ -535,16 +535,11 @@ void MachineUnit::PrintGlobalDecl()
     // 先把const的和不是const的给分开
     std::vector<SymbolEntry *> commonVar;
     std::vector<SymbolEntry *> constVar;
-    std::vector<SymbolEntry *> arrayVar;
     for (auto se : global_vars)
     {
-        if (se->getType()->isInt() && ((IntType *)se->getType())->isConst())
+        if ((se->getType()->isInt() && ((IntType *)se->getType())->isConst()) || se->getType()->isArray() && ((ArrayType *)se->getType())->isConst())
         {
             constVar.push_back(se);
-        }
-        else if (se->getType()->isArray())
-        {
-            arrayVar.push_back(se);
         }
         else
         {
@@ -557,10 +552,34 @@ void MachineUnit::PrintGlobalDecl()
         fprintf(yyout, ".data\n");
         for (auto se : commonVar)
         {
-            fprintf(yyout, ".global %s\n", se->toStr().c_str() + 1);
-            fprintf(yyout, ".size %s, %d\n", se->toStr().c_str() + 1, se->getType()->getSize() / 8);
-            fprintf(yyout, "%s:\n", se->toStr().c_str() + 1);
-            fprintf(yyout, "\t.word %d\n", ((IdentifierSymbolEntry *)se)->getValue());
+            if (se->getType()->isArray())
+            {
+                if (((IdentifierSymbolEntry *)se)->isInitial()) // 数组有初始化
+                {
+                    fprintf(yyout, ".global %s\n", se->toStr().c_str() + 1);
+                    fprintf(yyout, ".size %s, %d\n", se->toStr().c_str() + 1, se->getType()->getSize() / 8);
+                    fprintf(yyout, "%s:\n", se->toStr().c_str() + 1);
+                    int *arrayValue = ((IdentifierSymbolEntry *)se)->getArrayValue();
+                    int length = se->getType()->getSize() / 32;
+                    for (int i = 0; i < length; i++)
+                    {
+                        fprintf(yyout, "\t.word %d\n", arrayValue[i]);
+                    }
+                }
+                else
+                {
+                    //.comm symbol, length:在bss段申请一段命名空间,该段空间的名称叫symbol, 长度为length.
+                    // Ld 连接器在连接会为它留出空间.
+                    fprintf(yyout, ".comm %s, %d\n", se->toStr().c_str() + 1, se->getType()->getSize() / 8);
+                }
+            }
+            else
+            {
+                fprintf(yyout, ".global %s\n", se->toStr().c_str() + 1);
+                fprintf(yyout, ".size %s, %d\n", se->toStr().c_str() + 1, se->getType()->getSize() / 8);
+                fprintf(yyout, "%s:\n", se->toStr().c_str() + 1);
+                fprintf(yyout, "\t.word %d\n", ((IdentifierSymbolEntry *)se)->getValue());
+            }
         }
     }
     // const的放只读区
@@ -569,19 +588,34 @@ void MachineUnit::PrintGlobalDecl()
         fprintf(yyout, ".section .rodata\n");
         for (auto se : constVar)
         {
-            fprintf(yyout, ".global %s\n", se->toStr().c_str() + 1);
-            fprintf(yyout, ".size %s, %d\n", se->toStr().c_str() + 1, se->getType()->getSize() / 8);
-            fprintf(yyout, "%s:\n", se->toStr().c_str() + 1);
-            fprintf(yyout, "\t.word %d\n", ((IdentifierSymbolEntry *)se)->getValue());
-        }
-    }
-    if (arrayVar.size() > 0)
-    {
-        //.comm symbol, length:在bss段申请一段命名空间,该段空间的名称叫symbol, 长度为length.
-        // Ld 连接器在连接会为它留出空间.
-        for (auto se : arrayVar)
-        {
-            fprintf(yyout, ".comm %s, %d\n", se->toStr().c_str() + 1, se->getType()->getSize() / 8);
+            if (se->getType()->isArray())
+            {
+                if (((IdentifierSymbolEntry *)se)->isInitial())
+                {
+                    fprintf(yyout, ".global %s\n", se->toStr().c_str() + 1);
+                    fprintf(yyout, ".size %s, %d\n", se->toStr().c_str() + 1, se->getType()->getSize() / 8);
+                    fprintf(yyout, "%s:\n", se->toStr().c_str() + 1);
+                    int *arrayValue = ((IdentifierSymbolEntry *)se)->getArrayValue();
+                    int length = se->getType()->getSize() / 32;
+                    for (int i = 0; i < length; i++)
+                    {
+                        fprintf(yyout, "\t.word %d\n", arrayValue[i]);
+                    }
+                }
+                else
+                {
+                    //.comm symbol, length:在bss段申请一段命名空间,该段空间的名称叫symbol, 长度为length.
+                    // Ld 连接器在连接会为它留出空间.
+                    fprintf(yyout, ".comm %s, %d\n", se->toStr().c_str() + 1, se->getType()->getSize() / 8);
+                }
+            }
+            else
+            {
+                fprintf(yyout, ".global %s\n", se->toStr().c_str() + 1);
+                fprintf(yyout, ".size %s, %d\n", se->toStr().c_str() + 1, se->getType()->getSize() / 8);
+                fprintf(yyout, "%s:\n", se->toStr().c_str() + 1);
+                fprintf(yyout, "\t.word %d\n", ((IdentifierSymbolEntry *)se)->getValue());
+            }
         }
     }
 }
