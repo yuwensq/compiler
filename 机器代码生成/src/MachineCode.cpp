@@ -85,12 +85,12 @@ void MachineOperand::output()
         PrintReg();
         break;
     case LABEL:
-        if (this->label.substr(0, 2) == ".L")
+        if (this->label.substr(0, 2) == ".L") // 标签
             fprintf(yyout, "%s", this->label.c_str());
-        else if (this->label.substr(0, 1) == "@")
+        else if (this->label.substr(0, 1) == "@") // 函数
             fprintf(yyout, "%s", this->label.c_str() + 1);
-        else
-            fprintf(yyout, "addr_%s", this->label.c_str());
+        else // 变量
+            fprintf(yyout, "addr_%s%d", this->label.c_str(), this->getParent()->getParent()->getParent()->getParent()->getLtorgNum());
     default:
         break;
     }
@@ -461,7 +461,13 @@ void MachineBlock::output()
 {
     fprintf(yyout, ".L%d:\n", this->no);
     for (auto iter : inst_list)
+    {
         iter->output();
+        if (iter->isRet()) // 这里在每个函数返回语句处打印一个文字池
+        {
+            this->getParent()->getParent()->printLTORG();
+        }
+    }
 }
 
 std::vector<MachineOperand *> MachineFunction::getSavedRegs()
@@ -521,10 +527,16 @@ void MachineFunction::output()
     }
     entry->insertFront(new MovMInstruction(entry, MovMInstruction::MOV, fp, sp));
     entry->insertFront(new StackMInstrcuton(entry, StackMInstrcuton::PUSH, save_regs));
+    unsigned long long inst_num = 0;
     for (auto iter : block_list)
     {
         iter->backPatch(save_regs, stack_size);
         iter->output();
+        inst_num += iter->getInsts().size();
+        // if (inst_num >= 256) // 这里本来想256条指令打印一个文字池，不过效果不是很好
+        // {
+        //     this->parent->printLTORG();
+        // }
     }
 }
 
@@ -620,6 +632,21 @@ void MachineUnit::PrintGlobalDecl()
     }
 }
 
+void MachineUnit::printLTORG()
+{
+    // 打印文字池
+    if (global_vars.size() > 0)
+    {
+        fprintf(yyout, "\n.LTORG\n");
+        for (auto se : global_vars)
+        {
+            fprintf(yyout, "addr_%s%d:\n", se->toStr().c_str() + 1, ltorg_num);
+            fprintf(yyout, "\t.word %s\n", se->toStr().c_str() + 1);
+        }
+    }
+    ltorg_num++;
+}
+
 void MachineUnit::output()
 {
     // TODO
@@ -634,13 +661,5 @@ void MachineUnit::output()
     fprintf(yyout, "\n\t.text\n");
     for (auto iter : func_list)
         iter->output();
-    if (global_vars.size() > 0)
-    {
-        fprintf(yyout, "\naddr:\n");
-        for (auto se : global_vars)
-        {
-            fprintf(yyout, "addr_%s:\n", se->toStr().c_str() + 1);
-            fprintf(yyout, "\t.word %s\n", se->toStr().c_str() + 1);
-        }
-    }
+    printLTORG();
 }

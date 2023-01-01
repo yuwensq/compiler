@@ -606,9 +606,36 @@ void BinaryInstruction::genMachineCode(AsmBuilder *builder)
     }
     if (src2->isImm() && (abs(src2->getVal()) > 255 || opcode == MUL || opcode == DIV || opcode == MOD))
     {
+        // 按理说src1也要这么写，但是懒得改了
+        int value = src2->getVal();
+        bool isNeg = false;
+        if (value < 0)
+        {
+            isNeg = true;
+            value = -value;
+        }
+        int ele = (1 << 30);
         auto internal_reg = genMachineVReg();
-        cur_inst = new LoadMInstruction(cur_block, internal_reg, src2);
-        cur_block->InsertInst(cur_inst);
+        cur_block->InsertInst(new LoadMInstruction(cur_block, internal_reg, genMachineImm(0)));
+        while (value > 255)
+        {
+            if (value >= ele)
+            {
+                value -= ele;
+                cur_block->InsertInst(new BinaryMInstruction(cur_block, BinaryMInstruction::ADD, new MachineOperand(*internal_reg), new MachineOperand(*internal_reg), genMachineImm(ele)));
+            }
+            ele /= 2;
+        }
+        if (value > 0)
+        {
+            cur_block->InsertInst(new BinaryMInstruction(cur_block, BinaryMInstruction::ADD, new MachineOperand(*internal_reg), new MachineOperand(*internal_reg), genMachineImm(value)));
+        }
+        if (isNeg)
+        {
+            auto internal_reg2 = genMachineVReg();
+            cur_block->InsertInst(new LoadMInstruction(cur_block, internal_reg2, genMachineImm(0)));
+            cur_block->InsertInst(new BinaryMInstruction(cur_block, BinaryMInstruction::SUB, new MachineOperand(*internal_reg), new MachineOperand(*internal_reg2), new MachineOperand(*internal_reg)));
+        }
         src2 = new MachineOperand(*internal_reg);
     }
     switch (opcode)
@@ -832,19 +859,43 @@ void GepInstruction::genMachineCode(AsmBuilder *builder)
     }
     else if (!type2) // 局部变量
     {
+        // 偏移都是负数
         int offset = ((TemporarySymbolEntry *)operands[1]->getEntry())->getOffset();
-        if (abs(offset) <= 255)
+        if (offset >= -254)
         {
             cur_block->InsertInst(new BinaryMInstruction(cur_block, BinaryMInstruction::ADD, base, genMachineReg(11), genMachineImm(offset)));
             base = new MachineOperand(*base);
         }
         else
         {
+            // 拆成2的幂次，先加后减
             auto internal_reg = genMachineVReg();
-            cur_block->InsertInst(new LoadMInstruction(cur_block, internal_reg, genMachineImm(offset)));
-            cur_block->InsertInst(new BinaryMInstruction(cur_block, BinaryMInstruction::ADD, base, genMachineReg(11), new MachineOperand(*internal_reg)));
+            cur_block->InsertInst(new LoadMInstruction(cur_block, internal_reg, genMachineImm(0)));
+            offset = -offset;
+            int ele = 16384;
+            while (offset > 255)
+            {
+                if (offset >= ele)
+                {
+                    offset -= ele;
+                    cur_block->InsertInst(new BinaryMInstruction(cur_block, BinaryMInstruction::ADD, new MachineOperand(*internal_reg), new MachineOperand(*internal_reg), genMachineImm(ele)));
+                }
+                ele /= 2;
+            }
+            if (offset > 0)
+            {
+                cur_block->InsertInst(new BinaryMInstruction(cur_block, BinaryMInstruction::ADD, new MachineOperand(*internal_reg), new MachineOperand(*internal_reg), genMachineImm(offset)));
+            }
+            cur_block->InsertInst(new BinaryMInstruction(cur_block, BinaryMInstruction::SUB, base, genMachineReg(11), new MachineOperand(*internal_reg)));
             base = new MachineOperand(*base);
         }
+        // else
+        // {
+        //     auto internal_reg = genMachineVReg();
+        //     cur_block->InsertInst(new LoadMInstruction(cur_block, internal_reg, genMachineImm(offset)));
+        //     cur_block->InsertInst(new BinaryMInstruction(cur_block, BinaryMInstruction::ADD, base, genMachineReg(11), new MachineOperand(*internal_reg)));
+        //     base = new MachineOperand(*base);
+        // }
     }
     Type *arrType = ((PointerType *)operands[1]->getType())->getType();
     std::vector<int> indexs = ((ArrayType *)arrType)->getIndexs();

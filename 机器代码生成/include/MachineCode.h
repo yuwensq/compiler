@@ -107,6 +107,8 @@ public:
     bool isStack() { return type == STACK; };
     bool isLoad() { return type == LOAD; };
     bool isBinary() { return type == BINARY; };
+    bool isRet() { return type == BRANCH && op == 2; };
+    bool isUncondBranch() { return type == BRANCH && (op == 2 || (op == 0 && cond == MachineInstruction::NONE)); };
 };
 
 class BinaryMInstruction : public MachineInstruction
@@ -172,7 +174,7 @@ class BranchMInstruction : public MachineInstruction
 public:
     enum opType
     {
-        B,
+        B = 0,
         BL,
         BX
     };
@@ -247,6 +249,7 @@ public:
     std::set<MachineOperand *> &getLiveOut() { return live_out; };
     std::vector<MachineBlock *> &getPreds() { return pred; };
     std::vector<MachineBlock *> &getSuccs() { return succ; };
+    MachineFunction *getParent() { return parent; };
     void output();
 };
 
@@ -277,6 +280,7 @@ public:
     void InsertBlock(MachineBlock *block) { this->block_list.push_back(block); };
     void addSavedRegs(int regno) { saved_regs.insert(regno); };
     std::vector<MachineOperand *> getSavedRegs();
+    MachineUnit *getParent() { return parent; };
     void output();
 };
 
@@ -285,6 +289,7 @@ class MachineUnit
 private:
     std::vector<MachineFunction *> func_list;
     std::vector<SymbolEntry *> global_vars;
+    int ltorg_num = 0;
     void PrintGlobalDecl();
 
 public:
@@ -293,6 +298,8 @@ public:
     std::vector<MachineFunction *>::iterator end() { return func_list.end(); };
     void InsertFunc(MachineFunction *func) { func_list.push_back(func); };
     void setGlobalVars(std::vector<SymbolEntry *> gv) { global_vars = gv; };
+    void printLTORG(); // 打印文字池
+    int getLtorgNum() { return ltorg_num; };
     void output();
 };
 
