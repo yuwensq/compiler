@@ -502,22 +502,21 @@ void Id::genCode()
     Operand *addr = se->getAddr();
     if (se->getType()->isArray())
     {
-        // 先算地址
-        ExprNode *tmp = index;
         std::vector<Operand *> offs;
-        if (tmp == nullptr)
-        {
-            // 如果数组标识符没有索引，他应该是作为参数传递的，取数组指针就行
-            // 生成一条gep指令返回就行
-            offs.push_back(new Operand(new ConstantSymbolEntry(TypeSystem::intType, 0)));
-            new GepInstruction(dst, addr, offs, now_bb);
-            return;
-        }
+        ExprNode *tmp = index;
         while (tmp)
         {
             tmp->genCode();
             offs.push_back(tmp->getOperand());
             tmp = (ExprNode *)tmp->getNext();
+        }
+        if (this->isPointer)
+        {
+            // 数组作为函数参数传递指针，取数组指针就行
+            // 生成一条gep指令返回就行
+            offs.push_back(new Operand(new ConstantSymbolEntry(TypeSystem::intType, 0)));
+            new GepInstruction(dst, addr, offs, now_bb);
+            return;
         }
         addr = new Operand(new TemporarySymbolEntry(new PointerType(TypeSystem::intType), SymbolTable::getLabel()));
         new GepInstruction(addr, se->getAddr(), offs, now_bb);
@@ -528,7 +527,6 @@ void Id::genCode()
         if (tmp == nullptr)
         {
             // 如果数组标识符没有索引，他应该是作为参数传递的，取数组指针就行
-            // 生成一条gep指令返回就行
             new LoadInstruction(dst, addr, now_bb);
             return;
         }
@@ -639,9 +637,11 @@ void DeclStmt::genCode()
             std::vector<int> indexs = ((ArrayType *)se->getType())->getIndexs();
             int size = se->getType()->getSize() / TypeSystem::intType->getSize();
             std::vector<Operand *> offs;
-            for (int j = 0; j < indexs.size(); j++) {
+            for (int j = 0; j < indexs.size(); j++)
+            {
                 offs.push_back(new Operand(new ConstantSymbolEntry(TypeSystem::intType, 0)));
             }
+            indexs = ((ArrayType *)se->getType())->getIndexs();
             // 因为数组初始化可能会用到很多零，这里我们先准备一个，然后之后就不用频繁load了
             Operand *zeroReg = new Operand(new TemporarySymbolEntry(TypeSystem::intType, SymbolTable::getLabel()));
             Operand *zero = new Operand(new ConstantSymbolEntry(TypeSystem::intType, 0));

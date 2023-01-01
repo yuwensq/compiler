@@ -168,7 +168,7 @@ private:
     int stack_offset;
     int label;
     int argNum;
-    bool isPara;
+    bool isPara = false;
 
 public:
     TemporarySymbolEntry(Type *type, int label);

@@ -275,7 +275,7 @@ LINECOMMENT \/\/[^\n]*
     globals->install(yytext, se);
     return ID;
 }
-"starttime" {
+"putarray" {
     if(dump_tokens)
         DEBUG_FOR_LAB4(yytext);
     char *lexeme;
@@ -283,20 +283,21 @@ LINECOMMENT \/\/[^\n]*
     strcpy(lexeme, yytext);
     yylval.strtype = lexeme;
     std::vector<Type*> vec;
+    vec.push_back(TypeSystem::intType);
+    vec.push_back(new PointerType(new ArrayType({})));
     Type* funcType = new FunctionType(TypeSystem::voidType, vec);
     SymbolEntry* se = new IdentifierSymbolEntry(funcType, yytext, globals->getLevel(), true);
     globals->install(yytext, se);
     return ID;
 }
-"stoptime" {
+"getarray" {
     if(dump_tokens)
         DEBUG_FOR_LAB4(yytext);
     char *lexeme;
     lexeme = new char[strlen(yytext) + 1];
     strcpy(lexeme, yytext);
     yylval.strtype = lexeme;
-    std::vector<Type*> vec;
-    Type* funcType = new FunctionType(TypeSystem::voidType, vec);
+    Type* funcType = new FunctionType(TypeSystem::intType, {new PointerType(new ArrayType({}))});
     SymbolEntry* se = new IdentifierSymbolEntry(funcType, yytext, globals->getLevel(), true);
     globals->install(yytext, se);
     return ID;
@@ -330,6 +331,7 @@ LINECOMMENT \/\/[^\n]*
     char *lexeme;
     lexeme = new char[strlen(yytext) + 1];
     strcpy(lexeme, yytext);
+    lexeme[strlen(yytext)] = 0;
     yylval.strtype = lexeme;
     return ID;
 }

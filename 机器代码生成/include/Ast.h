@@ -141,6 +141,7 @@ class Id : public ExprNode
 {
 private:
     ExprNode *index;
+    bool isPointer = false;
 
 public:
     Id(SymbolEntry *se, ExprNode *index = nullptr) : ExprNode(se), index(index)
@@ -150,16 +151,20 @@ public:
         {
             std::vector<int> indexs = ((ArrayType *)se->getType())->getIndexs();
             SymbolEntry *temp;
-            if (index == nullptr) // 索引为空，引用数组指针
-            {
+            ExprNode *expr = index;
+            while (expr) {
+                expr = (ExprNode*)expr->getNext();
+                indexs.erase(indexs.begin());
+            }
+            if (indexs.size() <= 0) { // 如果索引和数组定义时候的维度一致，是引用某个数组元素
+                this->type = TypeSystem::intType;
+                temp = new TemporarySymbolEntry(TypeSystem::intType, SymbolTable::getLabel());
+            }
+            else { // 索引个数小于数组定义时候的维度，应该作为函数参数传递，传递的是一个指针
+                isPointer = true;
                 indexs.erase(indexs.begin());
                 this->type = new PointerType(new ArrayType(indexs));
                 temp = new TemporarySymbolEntry(this->type, SymbolTable::getLabel());
-            }
-            else
-            { // 索引不为空，应该引用的是数组中的某个元素
-                this->type = TypeSystem::intType;
-                temp = new TemporarySymbolEntry(TypeSystem::intType, SymbolTable::getLabel());
             }
             dst = new Operand(temp);
         }
