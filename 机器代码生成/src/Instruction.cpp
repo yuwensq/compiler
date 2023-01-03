@@ -834,6 +834,7 @@ void XorInstruction::genMachineCode(AsmBuilder *builder)
     cur_block->InsertInst(new CmpMInstruction(cur_block, src, genMachineImm(0)));
     cur_block->InsertInst(new MovMInstruction(cur_block, MovMInstruction::MOV, dst, genMachineImm(1), CmpMInstruction::EQ));
     cur_block->InsertInst(new MovMInstruction(cur_block, MovMInstruction::MOV, new MachineOperand(*dst), genMachineImm(0), CmpMInstruction::NE));
+    builder->setCmpOpcode(CmpMInstruction::EQ);
 }
 
 void ZextInstruction::genMachineCode(AsmBuilder *builder)
