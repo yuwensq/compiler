@@ -184,10 +184,10 @@ UnaryExpr::UnaryExpr(SymbolEntry *se, int op, ExprNode *expr) : ExprNode(se), op
     }
     if (op == UnaryExpr::NOT)
     {
-        if (expr->getType()->isInt())
-        {
-            this->expr = new ImplictCastExpr(expr);
-        }
+        // if (expr->getType()->isInt())
+        // {
+        //     this->expr = new ImplictCastExpr(expr);
+        // }
     }
     else if (op == UnaryExpr::SUB)
     {
@@ -467,7 +467,14 @@ void UnaryExpr::genCode()
     }
     else if (op == NOT)
     {
-        new XorInstruction(dst, expr->getOperand(), now_bb);
+        if (expr->getType()->isInt())
+        {
+            new CmpInstruction(CmpInstruction::E, dst, expr->getOperand(), new Operand(new ConstantSymbolEntry(TypeSystem::intType, 0)), now_bb);
+        }
+        else
+        {
+            new XorInstruction(dst, expr->getOperand(), now_bb);
+        }
         if (isCond)
         {
             BasicBlock *interB;

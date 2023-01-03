@@ -754,9 +754,10 @@ void CondBrInstruction::genMachineCode(AsmBuilder *builder)
     // TODO
     // 生成两条指令
     auto cur_block = builder->getBlock();
-    auto src = genMachineOperand(operands[0]);
-    cur_block->InsertInst(new CmpMInstruction(cur_block, src, genMachineImm(0)));
-    cur_block->InsertInst(new BranchMInstruction(cur_block, BranchMInstruction::B, genMachineLabel(true_branch->getNo()), CmpMInstruction::NE));
+    // auto src = genMachineOperand(operands[0]);
+    // cur_block->InsertInst(new CmpMInstruction(cur_block, src, genMachineImm(0)));
+    // cur_block->InsertInst(new BranchMInstruction(cur_block, BranchMInstruction::B, genMachineLabel(true_branch->getNo()), CmpMInstruction::NE));
+    cur_block->InsertInst(new BranchMInstruction(cur_block, BranchMInstruction::B, genMachineLabel(true_branch->getNo()), builder->getCmpOpcode()));
     cur_block->InsertInst(new BranchMInstruction(cur_block, BranchMInstruction::B, genMachineLabel(false_branch->getNo())));
 }
 
