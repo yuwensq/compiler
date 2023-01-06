@@ -813,11 +813,9 @@ void RetInstruction::genMachineCode(AsmBuilder *builder)
         cur_bb->InsertInst(new MovMInstruction(cur_bb, MovMInstruction::MOV, genMachineReg(0), genMachineOperand(operands[0])));
     }
     auto sp = genMachineReg(13);
-    // 释放栈空间，这里也不知道，因为寄存器分配之后可能会溢出到栈里面，这里也先意思意思
-    int stack_size = builder->getFunction()->AllocSpace(0);
-    auto cur_inst = new BinaryMInstruction(cur_bb, BinaryMInstruction::ADD, sp, sp, genMachineImm(stack_size));
+    // 释放栈空间，这里直接来一条mov就行了
+    auto cur_inst = new MovMInstruction(cur_bb, MovMInstruction::MOV, sp, genMachineReg(11));
     cur_bb->InsertInst(cur_inst);
-    cur_bb->addUInst(cur_inst);
     // 恢复保存的寄存器，这里还不知道，先欠着
     auto curr_inst = new StackMInstrcuton(cur_bb, StackMInstrcuton::POP, {});
     cur_bb->InsertInst(curr_inst);
