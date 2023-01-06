@@ -415,7 +415,7 @@ void MachineBlock::insertAfter(MachineInstruction *insertee, MachineInstruction 
     inst_list.insert(it, insertee);
 }
 
-void MachineBlock::backPatch(std::vector<MachineOperand *> saved_regs, int stack_size)
+void MachineBlock::backPatch(std::vector<MachineOperand *> saved_regs)
 {
     for (auto inst : unsure_insts)
     {
@@ -423,37 +423,6 @@ void MachineBlock::backPatch(std::vector<MachineOperand *> saved_regs, int stack
             ((StackMInstrcuton *)inst)->setRegs(saved_regs);
         else if (inst->isLoad())
             ((LoadMInstruction *)inst)->setOff(saved_regs.size() * 4);
-        else if (inst->isBinary())
-        {
-            int stackSize = stack_size;
-            auto father_block = inst->getParent();
-            while (stackSize > 16384)
-            {
-                father_block->insertAfter(new BinaryMInstruction(father_block,
-                                                                 BinaryMInstruction::ADD,
-                                                                 new MachineOperand(MachineOperand::REG, 13),
-                                                                 new MachineOperand(MachineOperand::REG, 13),
-                                                                 new MachineOperand(MachineOperand::IMM, 16384)),
-                                          inst);
-                stackSize -= 16384;
-            }
-            int ele = 16384;
-            while (stackSize > 256)
-            {
-                if (stackSize >= ele)
-                {
-                    father_block->insertAfter(new BinaryMInstruction(father_block,
-                                                                     BinaryMInstruction::ADD,
-                                                                     new MachineOperand(MachineOperand::REG, 13),
-                                                                     new MachineOperand(MachineOperand::REG, 13),
-                                                                     new MachineOperand(MachineOperand::IMM, ele)),
-                                              inst);
-                    stackSize -= ele;
-                }
-                ele /= 2;
-            }
-            ((BinaryMInstruction *)inst)->setStackSize(stackSize);
-        }
     }
 }
 
@@ -530,7 +499,7 @@ void MachineFunction::output()
     unsigned long long inst_num = 0;
     for (auto iter : block_list)
     {
-        iter->backPatch(save_regs, stack_size);
+        iter->backPatch(save_regs);
         iter->output();
         inst_num += iter->getInsts().size();
         // if (inst_num >= 256) // 这里本来想256条指令打印一个文字池，不过效果不是很好

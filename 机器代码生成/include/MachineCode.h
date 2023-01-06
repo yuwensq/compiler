@@ -243,7 +243,7 @@ public:
     void insertBefore(MachineInstruction *, MachineInstruction *);
     void insertAfter(MachineInstruction *, MachineInstruction *);
     void insertFront(MachineInstruction *inst) { this->inst_list.insert(inst_list.begin(), inst); };
-    void backPatch(std::vector<MachineOperand *>, int);
+    void backPatch(std::vector<MachineOperand *>);
     void addUInst(MachineInstruction *inst) { unsure_insts.push_back(inst); };
     std::set<MachineOperand *> &getLiveIn() { return live_in; };
     std::set<MachineOperand *> &getLiveOut() { return live_out; };
