@@ -19,6 +19,19 @@ public:
     MachineFunction *getFunction() { return this->mFunction; };
     MachineBlock *getBlock() { return this->mBlock; };
     int getCmpOpcode() { return this->cmpOpcode; };
+    static bool isLegalImm(int imm)
+    {
+        unsigned int num = (unsigned int)imm;
+        for (int i = 0; i < 16; i++)
+        {
+            if (num <= 0xff)
+            {
+                return true;
+            }
+            num = ((num << 2) | (num >> 30));
+        }
+        return false;
+    }
 };
 
 #endif

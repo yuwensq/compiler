@@ -30,6 +30,7 @@ public:
     MachineOperand *genMachineVReg();
     MachineOperand *genMachineImm(int val);
     MachineOperand *genMachineLabel(int block_no);
+    MachineOperand *immToVReg(MachineOperand *, MachineBlock *);
     virtual void genMachineCode(AsmBuilder *) = 0;
 
 protected:

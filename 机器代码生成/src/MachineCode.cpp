@@ -1,4 +1,5 @@
 #include "MachineCode.h"
+#include "AsmBuilder.h"
 #include "Type.h"
 #include <iostream>
 extern FILE *yyout;
@@ -90,7 +91,7 @@ void MachineOperand::output()
         else if (this->label.substr(0, 1) == "@") // 函数
             fprintf(yyout, "%s", this->label.c_str() + 1);
         else // 变量
-            fprintf(yyout, "addr_%s%d", this->label.c_str(), this->getParent()->getParent()->getParent()->getParent()->getLtorgNum());
+            fprintf(yyout, "addr_%s_%d", this->label.c_str(), this->getParent()->getParent()->getParent()->getParent()->getLtorgNum());
     default:
         break;
     }
@@ -429,12 +430,20 @@ void MachineBlock::backPatch(std::vector<MachineOperand *> saved_regs)
 void MachineBlock::output()
 {
     fprintf(yyout, ".L%d:\n", this->no);
+    unsigned long long int inst_num = 0;
     for (auto iter : inst_list)
     {
         iter->output();
+        inst_num++;
         if (iter->isRet()) // 这里在每个函数返回语句处打印一个文字池
         {
             this->getParent()->getParent()->printLTORG();
+        }
+        else if (inst_num >= 256) { // 这里，每隔256条指令，打一个文字池
+            int ltorg_num = this->getParent()->getParent()->getLtorgNum();
+            fprintf(yyout, "\tb .LT%d\n", ltorg_num);
+            this->getParent()->getParent()->printLTORG();
+            fprintf(yyout, ".LT%d:\n", ltorg_num);
         }
     }
 }
@@ -472,40 +481,27 @@ void MachineFunction::output()
     save_regs.push_back(fp);
     save_regs.push_back(lr);
     int stackSize = stack_size;
-    // 关于arm的立即数大小，很奇怪
-    while (stackSize > 16384)
+    auto stSize = new MachineOperand(MachineOperand::IMM, stackSize);
+    if (AsmBuilder::isLegalImm(stackSize))
     {
-        // 由于立即数有大小限制，好像最大一次可以减16384，太大的分多次减
-        entry->insertFront(new BinaryMInstruction(entry, BinaryMInstruction::SUB, sp, sp, new MachineOperand(MachineOperand::IMM, 16384)));
-        stackSize -= 16384;
+        entry->insertFront(new BinaryMInstruction(entry, BinaryMInstruction::SUB, sp, sp, stSize));
     }
-    // 剩下的一定小于等于16384，但是好像对于不是2的幂次的数，立即数最大能用255，这里我们拆成2的幂次
-    int ele = 16384;
-    while (stackSize > 256)
-    {
-        if (stackSize >= ele)
-        {
-            entry->insertFront(new BinaryMInstruction(entry, BinaryMInstruction::SUB, sp, sp, new MachineOperand(MachineOperand::IMM, ele)));
-            stackSize -= ele;
-        }
-        ele /= 2;
-    }
-    if (stackSize)
-    {
-        entry->insertFront(new BinaryMInstruction(entry, BinaryMInstruction::SUB, sp, sp, new MachineOperand(MachineOperand::IMM, stackSize)));
+    else {
+        if (stackSize & 0xff)
+            entry->insertFront(new BinaryMInstruction(entry, BinaryMInstruction::SUB, sp, sp, new MachineOperand(MachineOperand::IMM, stackSize & 0xff)));
+        if (stackSize & 0xff00)
+            entry->insertFront(new BinaryMInstruction(entry, BinaryMInstruction::SUB, sp, sp, new MachineOperand(MachineOperand::IMM, stackSize & 0xff00)));
+        if (stackSize & 0xff0000)
+            entry->insertFront(new BinaryMInstruction(entry, BinaryMInstruction::SUB, sp, sp, new MachineOperand(MachineOperand::IMM, stackSize & 0xff0000)));
+        if (stackSize & 0xff000000)
+            entry->insertFront(new BinaryMInstruction(entry, BinaryMInstruction::SUB, sp, sp, new MachineOperand(MachineOperand::IMM, stackSize & 0xff000000)));
     }
     entry->insertFront(new MovMInstruction(entry, MovMInstruction::MOV, fp, sp));
     entry->insertFront(new StackMInstrcuton(entry, StackMInstrcuton::PUSH, save_regs));
-    unsigned long long inst_num = 0;
     for (auto iter : block_list)
     {
         iter->backPatch(save_regs);
         iter->output();
-        inst_num += iter->getInsts().size();
-        // if (inst_num >= 256) // 这里本来想256条指令打印一个文字池，不过效果不是很好
-        // {
-        //     this->parent->printLTORG();
-        // }
     }
 }
 
@@ -609,7 +605,7 @@ void MachineUnit::printLTORG()
         fprintf(yyout, "\n.LTORG\n");
         for (auto se : global_vars)
         {
-            fprintf(yyout, "addr_%s%d:\n", se->toStr().c_str() + 1, ltorg_num);
+            fprintf(yyout, "addr_%s_%d:\n", se->toStr().c_str() + 1, ltorg_num);
             fprintf(yyout, "\t.word %s\n", se->toStr().c_str() + 1);
         }
     }

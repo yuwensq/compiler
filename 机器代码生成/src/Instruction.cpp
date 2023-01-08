@@ -2,6 +2,7 @@
 #include "BasicBlock.h"
 #include <iostream>
 #include <cmath>
+#include <assert.h>
 #include "Function.h"
 #include "Type.h"
 #include "MachineCode.h"
@@ -464,6 +465,27 @@ MachineOperand *Instruction::genMachineLabel(int block_no)
     return new MachineOperand(label);
 }
 
+MachineOperand *Instruction::immToVReg(MachineOperand *imm, MachineBlock *cur_block)
+{
+    assert(imm->isImm());
+    int value = imm->getVal();
+    auto internal_reg = genMachineVReg();
+    if (AsmBuilder::isLegalImm(value))
+    {
+        auto cur_inst = new MovMInstruction(cur_block, MovMInstruction::MOV, internal_reg, imm);
+        cur_block->InsertInst(cur_inst);
+    }
+    else
+    {
+        cur_block->InsertInst(new MovMInstruction(cur_block, MovMInstruction::MOV, internal_reg, genMachineImm(value & 0xffff)));
+        if (value & 0xff0000)
+            cur_block->InsertInst(new BinaryMInstruction(cur_block, BinaryMInstruction::ADD, internal_reg, internal_reg, genMachineImm(value & 0xff0000)));
+        if (value & 0xff000000)
+            cur_block->InsertInst(new BinaryMInstruction(cur_block, BinaryMInstruction::ADD, internal_reg, internal_reg, genMachineImm(value & 0xff000000)));
+    }
+    return internal_reg;
+}
+
 void AllocaInstruction::genMachineCode(AsmBuilder *builder)
 {
     /* HINT:
@@ -499,18 +521,22 @@ void LoadInstruction::genMachineCode(AsmBuilder *builder)
         auto dst = genMachineOperand(operands[0]);
         auto src1 = genMachineReg(11);
         int offset = dynamic_cast<TemporarySymbolEntry *>(operands[1]->getEntry())->getOffset();
-        auto src2 = genMachineImm(offset);
-        if (abs(offset) <= 16384)
+        if (AsmBuilder::isLegalImm(offset)) // 是合法立即数
         {
-            cur_inst = new LoadMInstruction(cur_block, dst, src1, src2);
+            cur_inst = new LoadMInstruction(cur_block, dst, src1, genMachineImm(offset));
             cur_block->InsertInst(cur_inst);
         }
         else
         {
+            // 低16位用mov，高16位用两个add
             auto internal_reg = genMachineVReg();
-            cur_block->InsertInst(new LoadMInstruction(cur_block, internal_reg, src2));
-            cur_block->InsertInst(new BinaryMInstruction(cur_block, BinaryMInstruction::ADD, new MachineOperand(*internal_reg), new MachineOperand(*internal_reg), src1));
-            cur_block->InsertInst(new LoadMInstruction(cur_block, dst, new MachineOperand(*internal_reg)));
+            cur_block->InsertInst(new MovMInstruction(cur_block, MovMInstruction::MOV, internal_reg, genMachineImm(offset & 0xffff)));
+            if (offset & 0xff0000)
+                cur_block->InsertInst(new BinaryMInstruction(cur_block, BinaryMInstruction::ADD, internal_reg, internal_reg, genMachineImm(offset & 0xff0000)));
+            if (offset & 0xff000000)
+                cur_block->InsertInst(new BinaryMInstruction(cur_block, BinaryMInstruction::ADD, internal_reg, internal_reg, genMachineImm(offset & 0xff000000)));
+            cur_block->InsertInst(new BinaryMInstruction(cur_block, BinaryMInstruction::ADD, internal_reg, internal_reg, src1));
+            cur_block->InsertInst(new LoadMInstruction(cur_block, dst, internal_reg));
         }
     }
     // Load operand from temporary variable
@@ -532,10 +558,7 @@ void StoreInstruction::genMachineCode(AsmBuilder *builder)
     auto src = genMachineOperand(operands[1], builder);
     if (src->isImm())
     {
-        auto internal_reg = genMachineVReg();
-        cur_inst = new MovMInstruction(cur_block, MovMInstruction::MOV, internal_reg, src);
-        cur_block->InsertInst(cur_inst);
-        src = new MachineOperand(*internal_reg);
+        src = new MachineOperand(*immToVReg(src, cur_block));
     }
     // Store global operand
     if (operands[0]->getEntry()->isVariable() && dynamic_cast<IdentifierSymbolEntry *>(operands[0]->getEntry())->isGlobal())
@@ -550,7 +573,7 @@ void StoreInstruction::genMachineCode(AsmBuilder *builder)
         cur_inst = new StoreMInstruction(cur_block, src, internal_reg2);
         cur_block->InsertInst(cur_inst);
     }
-    // Load local operand
+    // Store local operand
     else if (operands[0]->getEntry()->isTemporary() && operands[0]->getDef() && operands[0]->getDef()->isAlloc())
     {
         // example: store r1, [r0, #4]
@@ -559,18 +582,21 @@ void StoreInstruction::genMachineCode(AsmBuilder *builder)
         // cur_inst = new StoreMInstruction(cur_block, src, dst, off);
         // cur_block->InsertInst(cur_inst);
         int offset = dynamic_cast<TemporarySymbolEntry *>(operands[0]->getEntry())->getOffset();
-        auto off = genMachineImm(offset);
-        if (abs(offset) <= 16384)
+        if (AsmBuilder::isLegalImm(offset))
         {
-            cur_inst = new StoreMInstruction(cur_block, src, dst, off);
+            cur_inst = new StoreMInstruction(cur_block, src, dst, genMachineImm(offset));
             cur_block->InsertInst(cur_inst);
         }
         else
         {
             auto internal_reg = genMachineVReg();
-            cur_block->InsertInst(new LoadMInstruction(cur_block, internal_reg, off));
-            cur_block->InsertInst(new BinaryMInstruction(cur_block, BinaryMInstruction::ADD, new MachineOperand(*internal_reg), new MachineOperand(*internal_reg), dst));
-            cur_block->InsertInst(new StoreMInstruction(cur_block, src, new MachineOperand(*internal_reg)));
+            cur_block->InsertInst(new MovMInstruction(cur_block, MovMInstruction::MOV, internal_reg, genMachineImm(offset & 0xffff)));
+            if (offset & 0xff0000)
+                cur_block->InsertInst(new BinaryMInstruction(cur_block, BinaryMInstruction::ADD, internal_reg, internal_reg, genMachineImm(offset & 0xff0000)));
+            if (offset & 0xff000000)
+                cur_block->InsertInst(new BinaryMInstruction(cur_block, BinaryMInstruction::ADD, internal_reg, internal_reg, genMachineImm(offset & 0xff000000)));
+            cur_block->InsertInst(new BinaryMInstruction(cur_block, BinaryMInstruction::ADD, internal_reg, internal_reg, dst));
+            cur_block->InsertInst(new StoreMInstruction(cur_block, src, internal_reg));
         }
     }
     // Load operand from temporary variable
@@ -599,44 +625,15 @@ void BinaryInstruction::genMachineCode(AsmBuilder *builder)
     MachineInstruction *cur_inst = nullptr;
     if (src1->isImm())
     {
-        auto internal_reg = genMachineVReg();
-        cur_inst = new LoadMInstruction(cur_block, internal_reg, src1);
-        cur_block->InsertInst(cur_inst);
-        src1 = new MachineOperand(*internal_reg);
+        src1 = new MachineOperand(*immToVReg(src1, cur_block));
     }
-    if (src2->isImm() && (abs(src2->getVal()) > 255 || opcode == MUL || opcode == DIV || opcode == MOD))
+    if (src2->isImm() && (opcode == MUL || opcode == DIV || opcode == MOD))
     {
-        // 按理说src1也要这么写，但是懒得改了
-        int value = src2->getVal();
-        bool isNeg = false;
-        if (value < 0)
-        {
-            isNeg = true;
-            value = -value;
-        }
-        int ele = (1 << 30);
-        auto internal_reg = genMachineVReg();
-        cur_block->InsertInst(new LoadMInstruction(cur_block, internal_reg, genMachineImm(0)));
-        while (value > 255)
-        {
-            if (value >= ele)
-            {
-                value -= ele;
-                cur_block->InsertInst(new BinaryMInstruction(cur_block, BinaryMInstruction::ADD, new MachineOperand(*internal_reg), new MachineOperand(*internal_reg), genMachineImm(ele)));
-            }
-            ele /= 2;
-        }
-        if (value > 0)
-        {
-            cur_block->InsertInst(new BinaryMInstruction(cur_block, BinaryMInstruction::ADD, new MachineOperand(*internal_reg), new MachineOperand(*internal_reg), genMachineImm(value)));
-        }
-        if (isNeg)
-        {
-            auto internal_reg2 = genMachineVReg();
-            cur_block->InsertInst(new LoadMInstruction(cur_block, internal_reg2, genMachineImm(0)));
-            cur_block->InsertInst(new BinaryMInstruction(cur_block, BinaryMInstruction::SUB, new MachineOperand(*internal_reg), new MachineOperand(*internal_reg2), new MachineOperand(*internal_reg)));
-        }
-        src2 = new MachineOperand(*internal_reg);
+        src2 = new MachineOperand(*immToVReg(src2, cur_block));
+    }
+    else if (src2->isImm() && !AsmBuilder::isLegalImm(src2->getVal()))
+    {
+        src2 = new MachineOperand(*immToVReg(src2, cur_block));
     }
     switch (opcode)
     {
@@ -681,15 +678,11 @@ void CmpInstruction::genMachineCode(AsmBuilder *builder)
     auto src2 = genMachineOperand(operands[2]);
     if (src1->isImm())
     {
-        auto internal_reg = genMachineVReg();
-        cur_block->InsertInst(new LoadMInstruction(cur_block, internal_reg, src1));
-        src1 = new MachineOperand(*internal_reg);
+        src1 = new MachineOperand(*immToVReg(src1, cur_block));
     }
     if (src2->isImm())
     {
-        auto internal_reg = genMachineVReg();
-        cur_block->InsertInst(new LoadMInstruction(cur_block, internal_reg, src2));
-        src2 = new MachineOperand(*internal_reg);
+        src2 = new MachineOperand(*immToVReg(src2, cur_block));
     }
     cur_block->InsertInst(new CmpMInstruction(cur_block, src1, src2));
     // 这里借助builder向br指令传cond
@@ -754,9 +747,6 @@ void CondBrInstruction::genMachineCode(AsmBuilder *builder)
     // TODO
     // 生成两条指令
     auto cur_block = builder->getBlock();
-    // auto src = genMachineOperand(operands[0]);
-    // cur_block->InsertInst(new CmpMInstruction(cur_block, src, genMachineImm(0)));
-    // cur_block->InsertInst(new BranchMInstruction(cur_block, BranchMInstruction::B, genMachineLabel(true_branch->getNo()), CmpMInstruction::NE));
     cur_block->InsertInst(new BranchMInstruction(cur_block, BranchMInstruction::B, genMachineLabel(true_branch->getNo()), builder->getCmpOpcode()));
     cur_block->InsertInst(new BranchMInstruction(cur_block, BranchMInstruction::B, genMachineLabel(false_branch->getNo())));
 }
@@ -768,6 +758,11 @@ void CallInstruction::genMachineCode(AsmBuilder *builder)
     {
         // 前四个参数用r0-r3传
         auto param = genMachineOperand(operands[i]);
+        // 一条mov解决不了
+        if (param->isImm() && (param->getVal() & 0xffff0000))
+        {
+            param = new MachineOperand(*immToVReg(param, cur_block));
+        }
         // 用mov指令把参数放到对应寄存器里
         cur_block->InsertInst(new MovMInstruction(cur_block, MovMInstruction::MOV, genMachineReg(i - 1), param));
     }
@@ -778,9 +773,7 @@ void CallInstruction::genMachineCode(AsmBuilder *builder)
         auto param = genMachineOperand(operands[i]);
         if (param->isImm())
         {
-            auto internal_reg = genMachineVReg();
-            cur_block->InsertInst(new MovMInstruction(cur_block, MovMInstruction::MOV, internal_reg, param));
-            param = new MachineOperand(*internal_reg);
+            param = new MachineOperand(*immToVReg(param, cur_block));
         }
         cur_block->InsertInst(new StackMInstrcuton(cur_block, StackMInstrcuton::PUSH, {param}));
         param_size_in_stack += 4;
@@ -791,7 +784,11 @@ void CallInstruction::genMachineCode(AsmBuilder *builder)
     if (param_size_in_stack > 0)
     {
         auto sp = genMachineReg(13);
-        cur_block->InsertInst(new BinaryMInstruction(cur_block, BinaryMInstruction::ADD, sp, sp, genMachineImm(param_size_in_stack)));
+        auto stack_size = genMachineImm(param_size_in_stack);
+        if (AsmBuilder::isLegalImm(param_size_in_stack))
+            cur_block->InsertInst(new BinaryMInstruction(cur_block, BinaryMInstruction::ADD, sp, sp, stack_size));
+        else
+            cur_block->InsertInst(new BinaryMInstruction(cur_block, BinaryMInstruction::ADD, sp, sp, new MachineOperand(*immToVReg(stack_size, cur_block))));
     }
     if (operands[0])
     {
@@ -810,7 +807,10 @@ void RetInstruction::genMachineCode(AsmBuilder *builder)
     // 如果有返回值
     if (operands.size() > 0)
     {
-        cur_bb->InsertInst(new MovMInstruction(cur_bb, MovMInstruction::MOV, genMachineReg(0), genMachineOperand(operands[0])));
+        auto ret_value = genMachineOperand(operands[0]);
+        if (ret_value->isImm() && (ret_value->getVal() & 0xffff0000))
+            ret_value = new MachineOperand(*immToVReg(ret_value, cur_bb));
+        cur_bb->InsertInst(new MovMInstruction(cur_bb, MovMInstruction::MOV, genMachineReg(0), ret_value));
     }
     auto sp = genMachineReg(13);
     // 释放栈空间，这里直接来一条mov就行了
@@ -861,41 +861,17 @@ void GepInstruction::genMachineCode(AsmBuilder *builder)
     {
         // 偏移都是负数
         int offset = ((TemporarySymbolEntry *)operands[1]->getEntry())->getOffset();
-        if (offset >= -254)
+        auto off = genMachineImm(offset);
+        if (AsmBuilder::isLegalImm(offset))
         {
-            cur_block->InsertInst(new BinaryMInstruction(cur_block, BinaryMInstruction::ADD, base, genMachineReg(11), genMachineImm(offset)));
+            cur_block->InsertInst(new BinaryMInstruction(cur_block, BinaryMInstruction::ADD, base, genMachineReg(11), off));
             base = new MachineOperand(*base);
         }
         else
         {
-            // 拆成2的幂次，先加后减
-            auto internal_reg = genMachineVReg();
-            cur_block->InsertInst(new LoadMInstruction(cur_block, internal_reg, genMachineImm(0)));
-            offset = -offset;
-            int ele = 16384;
-            while (offset > 255)
-            {
-                if (offset >= ele)
-                {
-                    offset -= ele;
-                    cur_block->InsertInst(new BinaryMInstruction(cur_block, BinaryMInstruction::ADD, new MachineOperand(*internal_reg), new MachineOperand(*internal_reg), genMachineImm(ele)));
-                }
-                ele /= 2;
-            }
-            if (offset > 0)
-            {
-                cur_block->InsertInst(new BinaryMInstruction(cur_block, BinaryMInstruction::ADD, new MachineOperand(*internal_reg), new MachineOperand(*internal_reg), genMachineImm(offset)));
-            }
-            cur_block->InsertInst(new BinaryMInstruction(cur_block, BinaryMInstruction::SUB, base, genMachineReg(11), new MachineOperand(*internal_reg)));
+            cur_block->InsertInst(new BinaryMInstruction(cur_block, BinaryMInstruction::ADD, base, genMachineReg(11), new MachineOperand(*immToVReg(off, cur_block))));
             base = new MachineOperand(*base);
         }
-        // else
-        // {
-        //     auto internal_reg = genMachineVReg();
-        //     cur_block->InsertInst(new LoadMInstruction(cur_block, internal_reg, genMachineImm(offset)));
-        //     cur_block->InsertInst(new BinaryMInstruction(cur_block, BinaryMInstruction::ADD, base, genMachineReg(11), new MachineOperand(*internal_reg)));
-        //     base = new MachineOperand(*base);
-        // }
     }
     Type *arrType = ((PointerType *)operands[1]->getType())->getType();
     std::vector<int> indexs = ((ArrayType *)arrType)->getIndexs();
@@ -936,11 +912,9 @@ void GepInstruction::genMachineCode(AsmBuilder *builder)
     if (off > 0)
     {
         auto internal_reg1 = genMachineImm(off);
-        if (abs(off) > 16384)
+        if (!AsmBuilder::isLegalImm(off))
         {
-            auto internal_reg2 = genMachineVReg();
-            cur_block->InsertInst(new LoadMInstruction(cur_block, internal_reg2, internal_reg1));
-            internal_reg1 = new MachineOperand(*internal_reg2);
+            internal_reg1 = new MachineOperand(*immToVReg(internal_reg1, cur_block));
         }
         cur_block->InsertInst(new BinaryMInstruction(cur_block, BinaryMInstruction::ADD, new MachineOperand(*base), new MachineOperand(*base), new MachineOperand(*internal_reg1)));
     }
