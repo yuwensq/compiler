@@ -440,6 +440,7 @@ void MachineBlock::output()
             this->getParent()->getParent()->printLTORG();
         }
         else if (inst_num >= 256) { // 这里，每隔256条指令，打一个文字池
+            inst_num = 0;
             int ltorg_num = this->getParent()->getParent()->getLtorgNum();
             fprintf(yyout, "\tb .LT%d\n", ltorg_num);
             this->getParent()->getParent()->printLTORG();

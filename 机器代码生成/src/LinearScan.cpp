@@ -1,5 +1,7 @@
 #include <algorithm>
 #include "LinearScan.h"
+#include "SymbolTable.h"
+#include "AsmBuilder.h"
 #include "MachineCode.h"
 #include "LiveVariableAnalysis.h"
 
@@ -211,7 +213,7 @@ void LinearScan::expireOldIntervals(Interval *interval)
         }
         regs.push_back(actInterval->rreg);
         it = active.erase(it);
-    } 
+    }
     sort(regs.begin(), regs.end());
 }
 
@@ -262,20 +264,65 @@ void LinearScan::genSpillCode()
         for (auto use : interval->uses)
         {
             auto cur_bb = use->getParent()->getParent();
-            auto cur_inst = new LoadMInstruction(cur_bb,
-                                                 new MachineOperand(*use),
-                                                 new MachineOperand(MachineOperand::REG, 11),
-                                                 new MachineOperand(MachineOperand::IMM, interval->disp));
-            cur_bb->insertBefore(cur_inst, use->getParent());                                            
+            if (interval->disp > -254)
+            {
+                auto cur_inst = new LoadMInstruction(cur_bb,
+                                                     new MachineOperand(*use),
+                                                     new MachineOperand(MachineOperand::REG, 11),
+                                                     new MachineOperand(MachineOperand::IMM, interval->disp));
+                cur_bb->insertBefore(cur_inst, use->getParent());
+            }
+            // 这里负数太小的话就load吧
+            else
+            {
+                auto internal_reg = new MachineOperand(MachineOperand::VREG, SymbolTable::getLabel());
+                MachineInstruction *cur_inst = new LoadMInstruction(cur_bb,
+                                                                    internal_reg,
+                                                                    new MachineOperand(MachineOperand::IMM, interval->disp));
+                cur_bb->insertBefore(cur_inst, use->getParent());
+                cur_inst = new BinaryMInstruction(cur_bb,
+                                                  BinaryMInstruction::ADD,
+                                                  new MachineOperand(*internal_reg),
+                                                  new MachineOperand(*internal_reg),
+                                                  new MachineOperand(MachineOperand::REG, 11));
+                cur_bb->insertBefore(cur_inst, use->getParent());
+                cur_inst = new LoadMInstruction(cur_bb,
+                                                new MachineOperand(*use),
+                                                new MachineOperand(*internal_reg));
+                cur_bb->insertBefore(cur_inst, use->getParent());
+            }
         }
         // 在def后插入str
-        for (auto def : interval->defs) {
+        for (auto def : interval->defs)
+        {
             auto cur_bb = def->getParent()->getParent();
-            auto cur_inst = new StoreMInstruction(cur_bb,
-                                                 new MachineOperand(*def),
-                                                 new MachineOperand(MachineOperand::REG, 11),
-                                                 new MachineOperand(MachineOperand::IMM, interval->disp));
-            cur_bb->insertAfter(cur_inst, def->getParent());                                            
+            if (interval->disp > -254)
+            {
+                auto cur_inst = new StoreMInstruction(cur_bb,
+                                                      new MachineOperand(*def),
+                                                      new MachineOperand(MachineOperand::REG, 11),
+                                                      new MachineOperand(MachineOperand::IMM, interval->disp));
+                cur_bb->insertAfter(cur_inst, def->getParent());
+            }
+            // 这里负数太小的话就load吧
+            else
+            {
+                auto internal_reg = new MachineOperand(MachineOperand::VREG, SymbolTable::getLabel());
+                auto cur_inst = new LoadMInstruction(cur_bb,
+                                                     internal_reg,
+                                                     new MachineOperand(MachineOperand::IMM, interval->disp));
+                cur_bb->insertAfter(cur_inst, def->getParent());
+                auto cur_inst1 = new BinaryMInstruction(cur_bb,
+                                                        BinaryMInstruction::ADD,
+                                                        new MachineOperand(*internal_reg),
+                                                        new MachineOperand(*internal_reg),
+                                                        new MachineOperand(MachineOperand::REG, 11));
+                cur_bb->insertAfter(cur_inst1, cur_inst);
+                auto cur_inst2 = new StoreMInstruction(cur_bb,
+                                                       new MachineOperand(*def),
+                                                       new MachineOperand(*internal_reg));
+                cur_bb->insertAfter(cur_inst2, cur_inst1);
+            }
         }
     }
 }
