@@ -58,7 +58,7 @@ public:
     void output(int level);
     void genCode(){};
     void typeCheck(){};
-    virtual int getValue() { return -1; };
+    virtual double getValue() { return -1; };
     virtual Type *getType() { return type; };
 };
 
@@ -87,7 +87,7 @@ public:
     };
     BinaryExpr(SymbolEntry *se, int op, ExprNode *expr1, ExprNode *expr2);
     void output(int level);
-    int getValue();
+    double getValue();
     void typeCheck();
     void genCode();
 };
@@ -106,7 +106,7 @@ public:
     };
     UnaryExpr(SymbolEntry *se, int op, ExprNode *expr);
     void output(int level);
-    int getValue();
+    double getValue();
     void typeCheck();
     void genCode();
 };
@@ -114,6 +114,7 @@ public:
 class CallExpr : public ExprNode
 {
 private:
+    std::vector<ExprNode *> params; // 实参
     ExprNode *param;
 
 public:
@@ -129,12 +130,12 @@ public:
     Constant(SymbolEntry *se) : ExprNode(se)
     {
         dst = new Operand(se);
-        type = TypeSystem::intType;
+        type = se->getType();
     };
     void output(int level);
     void typeCheck();
     void genCode();
-    int getValue();
+    double getValue();
 };
 
 class Id : public ExprNode
@@ -152,24 +153,39 @@ public:
             std::vector<int> indexs = ((ArrayType *)se->getType())->getIndexs();
             SymbolEntry *temp;
             ExprNode *expr = index;
-            while (expr) {
-                expr = (ExprNode*)expr->getNext();
+            while (expr)
+            {
+                expr = (ExprNode *)expr->getNext();
                 indexs.erase(indexs.begin());
             }
-            if (indexs.size() <= 0) { // 如果索引和数组定义时候的维度一致，是引用某个数组元素
-                this->type = TypeSystem::intType;
-                temp = new TemporarySymbolEntry(TypeSystem::intType, SymbolTable::getLabel());
+            if (indexs.size() <= 0)
+            { // 如果索引和数组定义时候的维度一致，是引用某个数组元素
+                if (((ArrayType *)se->getType())->getBaseType()->isInt())
+                {
+                    this->type = TypeSystem::intType;
+                    temp = new TemporarySymbolEntry(TypeSystem::intType, SymbolTable::getLabel());
+                }
+                else if (((ArrayType *)se->getType())->getBaseType()->isFloat())
+                {
+                    this->type = TypeSystem::floatType;
+                    temp = new TemporarySymbolEntry(TypeSystem::floatType, SymbolTable::getLabel());
+                }
             }
-            else { // 索引个数小于数组定义时候的维度，应该作为函数参数传递，传递的是一个指针
+            else
+            { // 索引个数小于数组定义时候的维度，应该作为函数参数传递，传递的是一个指针
                 isPointer = true;
                 indexs.erase(indexs.begin());
-                this->type = new PointerType(new ArrayType(indexs));
+                if (((ArrayType *)se->getType())->getBaseType()->isInt())
+                    this->type = new PointerType(new ArrayType(indexs, TypeSystem::intType));
+                else if (((ArrayType *)se->getType())->getBaseType()->isFloat())
+                    this->type = new PointerType(new ArrayType(indexs, TypeSystem::floatType));
                 temp = new TemporarySymbolEntry(this->type, SymbolTable::getLabel());
             }
             dst = new Operand(temp);
         }
         else if (se->getType()->isPtr())
         {
+            ArrayType *arrType = (ArrayType *)((PointerType *)se->getType())->getType();
             SymbolEntry *temp;
             if (index == nullptr)
             {
@@ -178,15 +194,23 @@ public:
             }
             else
             {
-                this->type = TypeSystem::intType;
-                temp = new TemporarySymbolEntry(TypeSystem::intType, SymbolTable::getLabel());
+                if (arrType->getBaseType()->isInt())
+                {
+                    this->type = TypeSystem::intType;
+                    temp = new TemporarySymbolEntry(TypeSystem::intType, SymbolTable::getLabel());
+                }
+                else if (arrType->getBaseType()->isFloat())
+                {
+                    this->type = TypeSystem::floatType;
+                    temp = new TemporarySymbolEntry(TypeSystem::floatType, SymbolTable::getLabel());
+                }
             }
             dst = new Operand(temp);
         }
         else
         {
-            this->type = TypeSystem::intType;
-            SymbolEntry *temp = new TemporarySymbolEntry(TypeSystem::intType, SymbolTable::getLabel());
+            this->type = se->getType();
+            SymbolEntry *temp = new TemporarySymbolEntry(this->type, SymbolTable::getLabel());
             dst = new Operand(temp);
         }
     };
@@ -194,20 +218,47 @@ public:
     void typeCheck();
     void genCode();
     ExprNode *getIndex() { return index; };
-    int getValue();
+    double getValue();
 };
 
-// 这个用来bool转int和int转bool
+// 这个用来bool和int互相转换，以及int和float互相转，以及bool和float互相转
 class ImplictCastExpr : public ExprNode
 {
 private:
     ExprNode *expr;
-    bool b2i; // true为bool转int，false为int转bool
+    int op; // 节点类型
 
 public:
-    ImplictCastExpr(ExprNode *expr, bool b2i = false) : ExprNode(nullptr), expr(expr), b2i(b2i)
+    enum
     {
-        type = b2i ? TypeSystem::intType : TypeSystem::boolType;
+        BTI, // bool转int
+        ITB, // int转bool
+        FTI, // float转int
+        ITF, // int转float
+        BTF, // bool转float
+        FTB  // float转bool
+    };
+    // bool b2i = false
+    ImplictCastExpr(ExprNode *expr, int op) : ExprNode(nullptr), expr(expr), op(op)
+    {
+        switch (op)
+        {
+        case ITB:
+        case FTB:
+            type = TypeSystem::boolType;
+            break;
+        case BTI:
+        case FTI:
+            type = TypeSystem::intType;
+            break;
+        case BTF:
+        case ITF:
+            type = TypeSystem::floatType;
+            break;
+        default:
+            type = TypeSystem::intType;
+            break;
+        }
         dst = new Operand(new TemporarySymbolEntry(type, SymbolTable::getLabel()));
         if (expr->isConde())
         {
@@ -215,6 +266,7 @@ public:
             this->isCond = true;
         }
     };
+    double getValue();
     void output(int level);
     void typeCheck(){};
     void genCode();
@@ -274,11 +326,11 @@ private:
     ExprNode **exprArray; // 当Id是个数组的时候，这个东西用来存数据的初始值吧
 
 public:
-    DeclStmt(Id *id, ExprNode *expr = nullptr) : id(id), expr(expr) { this->exprArray = nullptr; };
+    DeclStmt(Id *id, ExprNode *expr = nullptr);
     void output(int level);
     void typeCheck();
     void genCode();
-    void setInitArray(ExprNode **exprArray) { this->exprArray = exprArray; };
+    void setInitArray(ExprNode **exprArray) ;
     Id *getId() { return id; };
 };
 

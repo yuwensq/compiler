@@ -2,16 +2,21 @@
 #include <assert.h>
 #include <string>
 #include <sstream>
+#include <iostream>
 
 IntType TypeSystem::commonInt = IntType(32);
 IntType TypeSystem::commonBool = IntType(1);
+FloatType TypeSystem::commonFloat = FloatType(32);
 VoidType TypeSystem::commonVoid = VoidType();
 IntType TypeSystem::commonConstInt = IntType(32, true);
+FloatType TypeSystem::commonConstFloat = FloatType(32, true);
 
 Type *TypeSystem::intType = &commonInt;
+Type *TypeSystem::floatType = &commonFloat;
 Type *TypeSystem::voidType = &commonVoid;
 Type *TypeSystem::boolType = &commonBool;
 Type *TypeSystem::constIntType = &commonConstInt;
+Type *TypeSystem::constFloatType = &commonConstFloat;
 
 std::string IntType::toStr()
 {
@@ -54,10 +59,17 @@ std::string ArrayType::toStr()
         buffer << "[" << index << " x ";
     }
     // 结束的时候，tmp应该是基本类型
-    buffer << "i32";
+    buffer << baseType->toStr();
     for (unsigned long int i = 0; i < indexs.size(); i++)
     {
         buffer << "]";
     }
+    return buffer.str();
+}
+
+std::string FloatType::toStr()
+{
+    std::ostringstream buffer;
+    buffer << "float";
     return buffer.str();
 }

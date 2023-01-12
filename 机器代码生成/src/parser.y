@@ -9,6 +9,7 @@
     #define YYERROR_VERBOSE 1
     int yyerror(char const*);
     std::stack<StmtNode*> whileStack;
+    Type *recentVarType;
     Type *recentFuncRetType;
     int argNum = 0; // 这个记录的是当前函数参数是第几个参数，因为前四个参数用寄存器存，之后的参数用栈传递
     std::stack<std::vector<int>> dimesionStack; // 维度栈
@@ -24,6 +25,7 @@
 
 %union {
     int inttype;
+    double floattype;
     char* strtype;
     Type* type;
     SymbolEntry* se;
@@ -34,7 +36,8 @@
 %start Program
 %token <strtype> ID
 %token <inttype> INTEGER
-%token INT VOID CONST
+%token <floattype> FLOATNUM
+%token INT FLOAT VOID CONST
 %token ADD SUB MUL DIV MOD OR AND LESS LESSEQUAL GREATER GREATEREQUAL ASSIGN EQUAL NOTEQUAL NOT
 %token IF ELSE WHILE
 %token LPAREN RPAREN LBRACE RBRACE LBRACKET RBRACKET COMMA SEMICOLON
@@ -187,6 +190,10 @@ PrimaryExp
         SymbolEntry* se = new ConstantSymbolEntry(TypeSystem::intType, $1);
         $$ = new Constant(se);
     }
+    | FLOATNUM {
+        SymbolEntry* se = new ConstantSymbolEntry(TypeSystem::floatType, $1);
+        $$ = new Constant(se);
+    }
     ;
 UnaryExp 
     : PrimaryExp {$$ = $1;}
@@ -204,7 +211,11 @@ UnaryExp
     }
     | ADD UnaryExp {$$ = $2;}
     | SUB UnaryExp {
-        SymbolEntry* se = new TemporarySymbolEntry(TypeSystem::intType, SymbolTable::getLabel());
+        SymbolEntry* se;
+        if ($2->getType()->isFloat())
+            se = new TemporarySymbolEntry(TypeSystem::floatType, SymbolTable::getLabel());
+        else
+            se = new TemporarySymbolEntry(TypeSystem::intType, SymbolTable::getLabel());
         $$ = new UnaryExpr(se, UnaryExpr::SUB, $2);
     }
     | NOT UnaryExp {
@@ -215,14 +226,26 @@ UnaryExp
 MulExp
     : UnaryExp {$$ = $1;}
     | MulExp MUL UnaryExp {
-        SymbolEntry* se = new TemporarySymbolEntry(TypeSystem::intType, SymbolTable::getLabel());
+        SymbolEntry* se;
+        if ($1->getType()->isFloat() || $3->getType()->isFloat())
+            se = new TemporarySymbolEntry(TypeSystem::floatType, SymbolTable::getLabel());
+        else 
+            se = new TemporarySymbolEntry(TypeSystem::intType, SymbolTable::getLabel());
         $$ = new BinaryExpr(se, BinaryExpr::MUL, $1, $3);
     }
     | MulExp DIV UnaryExp {
-        SymbolEntry* se = new TemporarySymbolEntry(TypeSystem::intType, SymbolTable::getLabel());
+        SymbolEntry* se;
+        if ($1->getType()->isFloat() || $3->getType()->isFloat())
+            se = new TemporarySymbolEntry(TypeSystem::floatType, SymbolTable::getLabel());
+        else 
+            se = new TemporarySymbolEntry(TypeSystem::intType, SymbolTable::getLabel());
         $$ = new BinaryExpr(se, BinaryExpr::DIV, $1, $3);
     }
     | MulExp MOD UnaryExp {
+        if ($1->getType()->isFloat() || $3->getType()->isFloat()) { 
+            // 这一点留作错误处理，mod两个操作数不能为float
+
+        }
         SymbolEntry* se = new TemporarySymbolEntry(TypeSystem::intType, SymbolTable::getLabel());
         $$ = new BinaryExpr(se, BinaryExpr::MOD, $1, $3);
     }
@@ -230,11 +253,19 @@ MulExp
 AddExp
     : MulExp {$$ = $1;}
     | AddExp ADD MulExp {
-        SymbolEntry* se = new TemporarySymbolEntry(TypeSystem::intType, SymbolTable::getLabel());
+        SymbolEntry* se;
+        if ($1->getType()->isFloat() || $3->getType()->isFloat())
+            se = new TemporarySymbolEntry(TypeSystem::floatType, SymbolTable::getLabel());
+        else 
+            se = new TemporarySymbolEntry(TypeSystem::intType, SymbolTable::getLabel());
         $$ = new BinaryExpr(se, BinaryExpr::ADD, $1, $3);
     }
     | AddExp SUB MulExp {
-        SymbolEntry* se = new TemporarySymbolEntry(TypeSystem::intType, SymbolTable::getLabel());
+        SymbolEntry* se;
+        if ($1->getType()->isFloat() || $3->getType()->isFloat())
+            se = new TemporarySymbolEntry(TypeSystem::floatType, SymbolTable::getLabel());
+        else 
+            se = new TemporarySymbolEntry(TypeSystem::intType, SymbolTable::getLabel());
         $$ = new BinaryExpr(se, BinaryExpr::SUB, $1, $3);
     }
     ;
@@ -299,6 +330,11 @@ FuncRParams
 Type
     : INT {
         $$ = TypeSystem::intType;
+        recentVarType = $$;
+    }
+    | FLOAT {
+        $$ = TypeSystem::floatType;
+        recentVarType = $$;
     }
     | VOID {
         $$ = TypeSystem::voidType;
@@ -329,7 +365,7 @@ VarDef
             delete []$1;
             assert(se == nullptr);
         }
-        se = new IdentifierSymbolEntry(TypeSystem::intType, $1, identifiers->getLevel());
+        se = new IdentifierSymbolEntry(recentVarType, $1, identifiers->getLevel());
         identifiers->install($1, se);
         $$ = new DeclStmt(new Id(se));
         delete []$1;
@@ -342,14 +378,13 @@ VarDef
             delete []$1;
             assert(se == nullptr);
         }
-        se = new IdentifierSymbolEntry(TypeSystem::intType, $1, identifiers->getLevel());
+        se = new IdentifierSymbolEntry(recentVarType, $1, identifiers->getLevel());
         identifiers->install($1, se);
         ((IdentifierSymbolEntry*)se)->setValue($3->getValue());
         $$ = new DeclStmt(new Id(se), $3);
         delete []$1;
     }
     | ID ArrayIndices {
-        // 这里先不识别数组初始化（因为不会）
         SymbolEntry* se;
         se = identifiers->lookup($1, true);
         if (se != nullptr) { //重复定义了
@@ -363,7 +398,7 @@ VarDef
             indexs.push_back(expr->getValue());
             expr = (ExprNode*)expr->getNext();
         }
-        Type *arrType = new ArrayType(indexs);
+        Type *arrType = new ArrayType(indexs, recentVarType);
         se = new IdentifierSymbolEntry(arrType, $1, identifiers->getLevel());
         identifiers->install($1, se);
         $$ = new DeclStmt(new Id(se));
@@ -383,7 +418,7 @@ VarDef
             indexs.push_back(expr->getValue());
             expr = (ExprNode*)expr->getNext();
         }
-        Type *arrType = new ArrayType(indexs);
+        Type *arrType = new ArrayType(indexs, recentVarType);
         se = new IdentifierSymbolEntry(arrType, $1, identifiers->getLevel());
         $<se>$ = se;
         identifiers->install($1, se);
@@ -394,7 +429,7 @@ VarDef
         dimesionStack.push(indexs);
         delete []$1;
     } InitVal {
-        $$ = new DeclStmt(new Id($<se>4));
+        $$ = new DeclStmt(new Id($<se>4, $2));
         ((DeclStmt*)$$)->setInitArray(initArray);
         initArray = nullptr;
         idx = 0;
@@ -430,7 +465,10 @@ ConstDef
             delete []$1;
             assert(se == nullptr);
         }
-        se = new IdentifierSymbolEntry(TypeSystem::constIntType, $1, identifiers->getLevel());
+        if (recentVarType->isInt())
+            se = new IdentifierSymbolEntry(TypeSystem::constIntType, $1, identifiers->getLevel());
+        else if (recentVarType->isFloat())
+            se = new IdentifierSymbolEntry(TypeSystem::constFloatType, $1, identifiers->getLevel());
         identifiers->install($1, se);
         ((IdentifierSymbolEntry*)se)->setValue($3->getValue());
         $$ = new DeclStmt(new Id(se), $3);
@@ -450,7 +488,12 @@ ConstDef
             indexs.push_back(expr->getValue());
             expr = (ExprNode*)expr->getNext();
         }
-        Type *arrType = new ArrayType(indexs, TypeSystem::constIntType);
+        Type *arrType = nullptr;
+        if (recentVarType->isInt())
+            arrType = new ArrayType(indexs, TypeSystem::constIntType);
+        else if (recentVarType->isFloat())
+            arrType = new ArrayType(indexs, TypeSystem::constFloatType);
+        assert(arrType != nullptr);
         se = new IdentifierSymbolEntry(arrType, $1, identifiers->getLevel());
         $<se>$ = se;
         identifiers->install($1, se);
@@ -600,7 +643,7 @@ FuncFParam
     }
     | Type ID LBRACKET RBRACKET {
         SymbolEntry* se;
-        se = new IdentifierSymbolEntry(new PointerType(new ArrayType({})), $2, identifiers->getLevel(), false, argNum);
+        se = new IdentifierSymbolEntry(new PointerType(new ArrayType({}, $1)), $2, identifiers->getLevel(), false, argNum);
         argNum++;
         identifiers->install($2, se);
         $$ = new DeclStmt(new Id(se));
@@ -614,7 +657,7 @@ FuncFParam
             expr = (ExprNode*)expr->getNext();
         }
         SymbolEntry* se;
-        se = new IdentifierSymbolEntry(new PointerType(new ArrayType(indexs)), $2, identifiers->getLevel(), false, argNum);
+        se = new IdentifierSymbolEntry(new PointerType(new ArrayType(indexs, $1)), $2, identifiers->getLevel(), false, argNum);
         argNum++;
         identifiers->install($2, se);
         $$ = new DeclStmt(new Id(se));

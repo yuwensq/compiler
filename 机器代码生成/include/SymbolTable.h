@@ -65,16 +65,13 @@ public:
 class ConstantSymbolEntry : public SymbolEntry
 {
 private:
-    int value;
-    std::string strValue;
+    double value;
 
 public:
-    ConstantSymbolEntry(Type *type, int value);
-    ConstantSymbolEntry(Type *type, std::string strValue);
+    ConstantSymbolEntry(Type *type, double value);
     ConstantSymbolEntry(Type *type);
     virtual ~ConstantSymbolEntry(){};
-    int getValue() const { return value; };
-    std::string getStrValue() const { return strValue; };
+    double getValue() const { return value; };
     std::string toStr();
     // You can add any function you need here.
 };
@@ -112,7 +109,7 @@ private:
     };
     std::string name;
     int scope;
-    int value;
+    double value;
     int label;
     bool initial;
     bool sysy;
@@ -134,8 +131,8 @@ public:
     void setAddr(Operand *addr) { this->addr = addr; };
     Operand *getAddr() { return addr; };
     Operand *getArgAddr() { return argAddr; }
-    void setValue(int value);
-    int getValue() const { return value; };
+    void setValue(double value);
+    double getValue() const { return value; };
     int getLabel() const { return label; };
     void setLabel() { label = SymbolTable::getLabel(); };
     void setArrayValue(int *arrayValue) { this->arrayValue = arrayValue; };

@@ -53,7 +53,9 @@ protected:
         ALLOCA,
         XOR,
         ZEXT,
-        GEP
+        GEP,
+        FPTSI,
+        SITFP
     };
 };
 
@@ -105,14 +107,17 @@ public:
     void genMachineCode(AsmBuilder *);
     enum
     {
+        ADD = 0,
         SUB,
-        ADD,
-        AND,
-        OR,
         MUL,
         DIV,
+        AND,
+        OR,
         MOD
     };
+
+private:
+    bool floatVersion;
 };
 
 class CmpInstruction : public Instruction
@@ -124,13 +129,16 @@ public:
     void genMachineCode(AsmBuilder *);
     enum
     {
-        E,
+        E = 0,
         NE,
-        L,
         GE,
-        G,
-        LE
+        L,
+        LE,
+        G
     };
+
+private:
+    bool floatVersion;
 };
 
 // unconditional branch
@@ -214,6 +222,22 @@ public:
 
 private:
     bool type2 = false;
+};
+
+class F2IInstruction : public Instruction
+{
+public:
+    F2IInstruction(Operand *dst, Operand *src, BasicBlock *insert_bb = nullptr);
+    void output() const;
+    void genMachineCode(AsmBuilder *);
+};
+
+class I2FInstruction : public Instruction
+{
+public:
+    I2FInstruction(Operand *dst, Operand *src, BasicBlock *insert_bb = nullptr);
+    void output() const;
+    void genMachineCode(AsmBuilder *);
 };
 
 #endif

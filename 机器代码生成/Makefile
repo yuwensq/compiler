@@ -72,7 +72,7 @@ $(TEST_PATH)/%_std.ll:$(TEST_PATH)/%.sy
 	@clang -x c $< -S -m32 -emit-llvm -o $@ 
 
 $(TEST_PATH)/%_std.s:$(TEST_PATH)/%.sy
-	@arm-linux-gnueabihf-gcc -x c $< -S -o $@ 
+	@arm-linux-gnueabi-gcc -x c $< -S -o $@ 
 
 $(TEST_PATH)/%.s:$(TEST_PATH)/%.sy
 	@timeout 5s $(BINARY) $< -o $@ -S 2>$(addsuffix .log, $(basename $@))
@@ -113,14 +113,14 @@ test:app
 			continue
 			fi
 		fi
-		arm-linux-gnueabihf-gcc -mcpu=cortex-a72 -o $${BIN} $${ASM} $(SYSLIB_PATH)/libsysy.a >>$${LOG} 2>&1
+		arm-linux-gnueabi-gcc -mcpu=cortex-a72 -o $${BIN} $${ASM} $(SYSLIB_PATH)/libsysy.a >>$${LOG} 2>&1
 		if [ $$? != 0 ]; then
 			echo "\033[1;31mFAIL:\033[0m $${FILE}\t\033[1;31mAssemble Error\033[0m"
 		else
 			if [ -f "$${IN}" ]; then
-				timeout 2s qemu-arm -L /usr/arm-linux-gnueabihf $${BIN} <$${IN} >$${RES} 2>>$${LOG}
+				timeout 2s qemu-arm -L /usr/arm-linux-gnueabi $${BIN} <$${IN} >$${RES} 2>>$${LOG}
 			else
-				timeout 2s qemu-arm -L /usr/arm-linux-gnueabihf $${BIN} >$${RES} 2>>$${LOG}
+				timeout 2s qemu-arm -L /usr/arm-linux-gnueabi $${BIN} >$${RES} 2>>$${LOG}
 			fi
 			RETURN_VALUE=$$?
 			FINAL=`tail -c 1 $${RES}`

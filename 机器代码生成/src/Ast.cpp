@@ -2,6 +2,7 @@
 #include <stack>
 #include <string>
 #include <iostream>
+#include <assert.h>
 #include "IRBuilder.h"
 #include "Instruction.h"
 #include "SymbolTable.h"
@@ -86,80 +87,147 @@ BinaryExpr::BinaryExpr(SymbolEntry *se, int op, ExprNode *expr1, ExprNode *expr2
         fprintf(stderr, "invalid operand of type \'void\' to binary \'opeartor%s\'\n", op_type.c_str());
     }
     // 前几个操作符是算术运算符，返回类型是int型，后面是逻辑运算符，返回类型是Bool型
+    Type *type1 = expr1->getType();
+    Type *type2 = expr2->getType();
+    bool hasFloat = (type1->isFloat() || type2->isFloat());
     if (op >= BinaryExpr::AND && op <= BinaryExpr::NOTEQUAL)
     {
-        // 对于AND和OR逻辑运算，如果操作数表达式为int型，需要进行隐式转换，将int型转为bool型。
+        // 对于AND和OR逻辑运算，如果操作数表达式不是bool型，需要进行隐式转换，转为bool型。
         if (op == BinaryExpr::AND || op == BinaryExpr::OR)
         {
-            if (expr1->getType()->isInt())
-            {
-                this->expr1 = new ImplictCastExpr(expr1);
-            }
-            if (expr2->getType()->isInt())
-            {
-                this->expr2 = new ImplictCastExpr(expr2);
-            }
+            if (type1->isInt())
+                this->expr1 = new ImplictCastExpr(expr1, ImplictCastExpr::ITB);
+            else if (type1->isFloat())
+                this->expr1 = new ImplictCastExpr(expr1, ImplictCastExpr::FTB);
+            if (type2->isInt())
+                this->expr2 = new ImplictCastExpr(expr2, ImplictCastExpr::ITB);
+            else if (type2->isFloat())
+                this->expr2 = new ImplictCastExpr(expr2, ImplictCastExpr::FTB);
         }
         else
         {
-            if (expr1->getType()->isBool())
-            {
-                this->expr1 = new ImplictCastExpr(expr1, true);
-            }
-            if (expr2->getType()->isBool())
-            {
-                this->expr2 = new ImplictCastExpr(expr2, true);
-            }
+            if (type1->isBool())
+                this->expr1 = new ImplictCastExpr(expr1, hasFloat ? ImplictCastExpr::BTF : ImplictCastExpr::BTI);
+            else if (type1->isInt() && hasFloat)
+                this->expr1 = new ImplictCastExpr(expr1, ImplictCastExpr::ITF);
+            if (type2->isBool())
+                this->expr2 = new ImplictCastExpr(expr2, hasFloat ? ImplictCastExpr::BTF : ImplictCastExpr::BTI);
+            else if (type2->isInt() && hasFloat)
+                this->expr2 = new ImplictCastExpr(expr2, ImplictCastExpr::ITF);
+        }
+    }
+    else if (op != BinaryExpr::MOD)
+    { // 如果是MOD类型的话，两个操作数一定是int，不然它走不出语法分析
+        // 这里不考虑bool类型做操作数的情况
+        if (type1->isInt() && hasFloat)
+            this->expr1 = new ImplictCastExpr(expr1, ImplictCastExpr::ITF);
+        if (type2->isInt() && hasFloat)
+        {
+            this->expr2 = new ImplictCastExpr(expr2, ImplictCastExpr::ITF);
         }
     }
 }
 
-int BinaryExpr::getValue()
+double BinaryExpr::getValue()
 {
-    int value1 = expr1->getValue();
-    int value2 = expr2->getValue();
-    int value;
-    switch (op)
+    // 这里虽然用double存储，但是如果结果是float，计算的时候要转成float，要不可能
+    // 精度偏高感觉
+    double value1 = expr1->getValue();
+    double value2 = expr2->getValue();
+    double value;
+    if (type->isFloat())
     {
-    case ADD:
-        value = value1 + value2;
-        break;
-    case SUB:
-        value = value1 - value2;
-        break;
-    case MUL:
-        value = value1 * value2;
-        break;
-    case DIV:
-        value = value1 / value2;
-        break;
-    case MOD:
-        value = value1 % value2;
-        break;
-    case AND:
-        value = value1 && value2;
-        break;
-    case OR:
-        value = value1 || value2;
-        break;
-    case LESS:
-        value = value1 < value2;
-        break;
-    case LESSEQUAL:
-        value = value1 <= value2;
-        break;
-    case GREATER:
-        value = value1 > value2;
-        break;
-    case GREATEREQUAL:
-        value = value1 >= value2;
-        break;
-    case EQUAL:
-        value = value1 == value2;
-        break;
-    case NOTEQUAL:
-        value = value1 != value2;
-        break;
+        float value1 = (float)expr1->getValue();
+        float value2 = (float)expr2->getValue();
+        float value;
+        switch (op)
+        {
+        case ADD:
+            value = value1 + value2;
+            break;
+        case SUB:
+            value = value1 - value2;
+            break;
+        case MUL:
+            value = value1 * value2;
+            break;
+        case DIV:
+            value = value1 / value2;
+            break;
+        // case MOD: // 这里认为浮点数不能模
+        //     value = value1 % value2;
+        //     break;
+        case AND:
+            value = value1 && value2;
+            break;
+        case OR:
+            value = value1 || value2;
+            break;
+        case LESS:
+            value = value1 < value2;
+            break;
+        case LESSEQUAL:
+            value = value1 <= value2;
+            break;
+        case GREATER:
+            value = value1 > value2;
+            break;
+        case GREATEREQUAL:
+            value = value1 >= value2;
+            break;
+        case EQUAL:
+            value = value1 == value2;
+            break;
+        case NOTEQUAL:
+            value = value1 != value2;
+            break;
+        }
+        return value;
+    }
+    else // 如果最终结果为int，那么其实两个操作数类型都是int，没啥精度问题，直接算
+    {
+        switch (op)
+        {
+        case ADD:
+            value = value1 + value2;
+            break;
+        case SUB:
+            value = value1 - value2;
+            break;
+        case MUL:
+            value = value1 * value2;
+            break;
+        case DIV:
+            value = value1 / value2;
+            break;
+        case MOD:
+            value = (int)value1 % (int)value2;
+            break;
+        case AND:
+            value = value1 && value2;
+            break;
+        case OR:
+            value = value1 || value2;
+            break;
+        case LESS:
+            value = value1 < value2;
+            break;
+        case LESSEQUAL:
+            value = value1 <= value2;
+            break;
+        case GREATER:
+            value = value1 > value2;
+            break;
+        case GREATEREQUAL:
+            value = value1 >= value2;
+            break;
+        case EQUAL:
+            value = value1 == value2;
+            break;
+        case NOTEQUAL:
+            value = value1 != value2;
+            break;
+        }
     }
     return value;
 }
@@ -193,37 +261,38 @@ UnaryExpr::UnaryExpr(SymbolEntry *se, int op, ExprNode *expr) : ExprNode(se), op
     {
         if (expr->getType()->isBool())
         {
-            this->expr = new ImplictCastExpr(expr, true);
+            this->expr = new ImplictCastExpr(expr, ImplictCastExpr::BTI);
         }
     }
 }
 
-int UnaryExpr::getValue()
+double UnaryExpr::getValue()
 {
-    int value = expr->getValue();
+    double value = expr->getValue();
     switch (op)
     {
     case NOT:
         value = (!value);
         break;
     case SUB:
+        // 这里不用考虑精度，取负数就是符号位变一下
         value = (-value);
         break;
     }
     return value;
 }
 
-int Constant::getValue()
+double Constant::getValue()
 {
     return ((ConstantSymbolEntry *)symbolEntry)->getValue();
 }
 
-int Id::getValue()
+double Id::getValue()
 {
     return ((IdentifierSymbolEntry *)symbolEntry)->getValue();
 }
 
-CallExpr::CallExpr(SymbolEntry *se, ExprNode *param) : ExprNode(se), param(param)
+CallExpr::CallExpr(SymbolEntry *se, ExprNode *param) : ExprNode(se)
 {
     dst = nullptr;
     // 统计实参数量
@@ -231,6 +300,7 @@ CallExpr::CallExpr(SymbolEntry *se, ExprNode *param) : ExprNode(se), param(param
     ExprNode *temp = param;
     while (temp)
     {
+        params.push_back(temp);
         paramCnt++;
         temp = (ExprNode *)(temp->getNext());
     }
@@ -260,22 +330,30 @@ CallExpr::CallExpr(SymbolEntry *se, ExprNode *param) : ExprNode(se), param(param
         }
         ExprNode *temp = param;
         // 逐个比较形参列表和实参列表中每个参数的类型是否相同
-        for (auto it = FParams.begin(); it != FParams.end(); it++)
-        {
-            if (temp == nullptr)
-            {
-                fprintf(stderr, "too few arguments to function %s %s\n", symbolEntry->toStr().c_str(), type->toStr().c_str());
-                break;
-            }
-            // else if ((*it)->getKind() != temp->getType()->getKind())
-            // {
-            //     fprintf(stderr, "parameter's type %s can't convert to %s\n", temp->getType()->toStr().c_str(), (*it)->toStr().c_str());
-            // }
-            temp = (ExprNode *)(temp->getNext());
-        }
-        if (temp != nullptr)
-        {
+        if (params.size() < FParams.size())
+            fprintf(stderr, "too few arguments to function %s %s\n", symbolEntry->toStr().c_str(), type->toStr().c_str());
+        else if (params.size() > FParams.size())
             fprintf(stderr, "too many arguments to function %s %s\n", symbolEntry->toStr().c_str(), type->toStr().c_str());
+        auto it = FParams.begin();
+        auto it2 = params.begin();
+        for (; it != FParams.end(); it++, it2++)
+        {
+            if ((*it)->isFloat() && (*it2)->getType()->isInt())
+                *it2 = new ImplictCastExpr(*it2, ImplictCastExpr::ITF);
+            else if ((*it)->isInt() && (*it2)->getType()->isFloat())
+                *it2 = new ImplictCastExpr(*it2, ImplictCastExpr::FTI);
+            else if ((*it)->isInt() && (*it2)->getType()->isBool())
+                *it2 = new ImplictCastExpr(*it2, ImplictCastExpr::BTI);
+            else if ((*it)->isBool() && (*it2)->getType()->isInt())
+                *it2 = new ImplictCastExpr(*it2, ImplictCastExpr::ITB);
+            else if ((*it)->isFloat() && (*it2)->getType()->isBool())
+                *it2 = new ImplictCastExpr(*it2, ImplictCastExpr::BTF);
+            else if ((*it)->isBool() && (*it2)->getType()->isFloat())
+                *it2 = new ImplictCastExpr(*it2, ImplictCastExpr::FTB);
+            else if ((*it)->getKind() != (*it2)->getType()->getKind())
+            {
+                fprintf(stderr, "parameter's type %s can't convert to %s\n", (*it2)->getType()->toStr().c_str(), (*it)->toStr().c_str());
+            }
         }
     }
     else
@@ -291,25 +369,25 @@ CallExpr::CallExpr(SymbolEntry *se, ExprNode *param) : ExprNode(se), param(param
 IfStmt::IfStmt(ExprNode *cond, StmtNode *thenStmt) : cond(cond), thenStmt(thenStmt)
 {
     if (cond->getType()->isInt())
-    {
-        this->cond = new ImplictCastExpr(cond);
-    }
+        this->cond = new ImplictCastExpr(cond, ImplictCastExpr::ITB);
+    else if (cond->getType()->isFloat())
+        this->cond = new ImplictCastExpr(cond, ImplictCastExpr::FTB);
 }
 
 IfElseStmt::IfElseStmt(ExprNode *cond, StmtNode *thenStmt, StmtNode *elseStmt) : cond(cond), thenStmt(thenStmt), elseStmt(elseStmt)
 {
     if (cond->getType()->isInt())
-    {
-        this->cond = new ImplictCastExpr(cond);
-    }
+        this->cond = new ImplictCastExpr(cond, ImplictCastExpr::ITB);
+    else if (cond->getType()->isFloat())
+        this->cond = new ImplictCastExpr(cond, ImplictCastExpr::FTB);
 }
 
 WhileStmt::WhileStmt(ExprNode *cond, StmtNode *stmt) : cond(cond), stmt(stmt)
 {
     if (cond->getType()->isInt())
-    {
-        this->cond = new ImplictCastExpr(cond);
-    }
+        this->cond = new ImplictCastExpr(cond, ImplictCastExpr::ITB);
+    else if (cond->getType()->isFloat())
+        this->cond = new ImplictCastExpr(cond, ImplictCastExpr::FTB);
 }
 
 BreakStmt::BreakStmt(StmtNode *whileStmt) : whileStmt(whileStmt)
@@ -333,22 +411,21 @@ ReturnStmt::ReturnStmt(ExprNode *retValue, Type *funcRetType) : retValue(retValu
     // 判断返回值和函数返回值是否一致
     Type *retType;
     if (retValue == nullptr)
-    {
         retType = TypeSystem::voidType;
-    }
     else
-    {
         retType = retValue->getType();
-    }
-    if (retType->getKind() != funcRetType->getKind())
-    {
+    if (funcRetType->isFloat() && retType->isInt())
+        this->retValue = new ImplictCastExpr(this->retValue, ImplictCastExpr::ITF);
+    else if (funcRetType->isInt() && retType->isFloat())
+        this->retValue = new ImplictCastExpr(this->retValue, ImplictCastExpr::FTI);
+    else if (retType->getKind() != funcRetType->getKind())
         fprintf(stderr, "return type isn't equal to function type\n");
-    }
 }
 
 AssignStmt::AssignStmt(ExprNode *lval, ExprNode *expr) : lval(lval), expr(expr)
 {
     Type *type = ((Id *)lval)->getType();
+    Type *exprType = expr->getType();
     SymbolEntry *se = lval->getSymPtr();
     bool flag = true;
     if (type->isInt())
@@ -360,11 +437,28 @@ AssignStmt::AssignStmt(ExprNode *lval, ExprNode *expr) : lval(lval), expr(expr)
             flag = false;
         }
     }
-    // if (flag && !expr->getType()->isInt())
-    // {
-    //     fprintf(stderr, "cannot initialize a variable of type \'int\' with an rvalue of type \'%s\'\n",
-    //             expr->getType()->toStr().c_str());
-    // }
+    else if (type->isFloat())
+    {
+        if (((FloatType *)type)->isConst())
+        {
+            fprintf(stderr, "cannot assign to variable \'%s\' with const-qualified type \'%s\'\n",
+                    ((IdentifierSymbolEntry *)se)->toStr().c_str(), type->toStr().c_str());
+            flag = false;
+        }
+    }
+    if (flag && expr->getType()->isBool())
+    {
+        fprintf(stderr, "cannot initialize a variable of type \'int\' with an rvalue of type \'%s\'\n",
+                expr->getType()->toStr().c_str());
+    }
+    if (type->isInt() && exprType->isFloat())
+    {
+        this->expr = new ImplictCastExpr(this->expr, ImplictCastExpr::FTI);
+    }
+    else if (type->isFloat() && exprType->isInt())
+    {
+        this->expr = new ImplictCastExpr(this->expr, ImplictCastExpr::ITF);
+    }
 }
 
 // -----------只因Code代码区------------------
@@ -463,13 +557,20 @@ void UnaryExpr::genCode()
     expr->genCode();
     if (op == SUB)
     {
-        new BinaryInstruction(BinaryInstruction::SUB, dst, new Operand(new ConstantSymbolEntry(TypeSystem::intType, 0)), expr->getOperand(), now_bb);
+        if (expr->getType()->isInt())
+            new BinaryInstruction(BinaryInstruction::SUB, dst, new Operand(new ConstantSymbolEntry(TypeSystem::intType, 0)), expr->getOperand(), now_bb);
+        else if (expr->getType()->isFloat())
+            new BinaryInstruction(BinaryInstruction::SUB, dst, new Operand(new ConstantSymbolEntry(TypeSystem::floatType, 0)), expr->getOperand(), now_bb);
     }
     else if (op == NOT)
     {
         if (expr->getType()->isInt())
         {
             new CmpInstruction(CmpInstruction::E, dst, expr->getOperand(), new Operand(new ConstantSymbolEntry(TypeSystem::intType, 0)), now_bb);
+        }
+        else if (expr->getType()->isFloat())
+        {
+            new CmpInstruction(CmpInstruction::E, dst, expr->getOperand(), new Operand(new ConstantSymbolEntry(TypeSystem::floatType, 0)), now_bb);
         }
         else
         {
@@ -488,12 +589,10 @@ void UnaryExpr::genCode()
 void CallExpr::genCode()
 {
     std::vector<Operand *> rParams;
-    ExprNode *tmp = param;
-    while (tmp != nullptr)
+    for (auto param : params)
     {
-        tmp->genCode();
-        rParams.push_back(tmp->getOperand());
-        tmp = (ExprNode *)tmp->getNext();
+        param->genCode();
+        rParams.push_back(param->getOperand());
     }
     new CallInstruction(dst, symbolEntry, rParams, now_bb);
 }
@@ -525,7 +624,10 @@ void Id::genCode()
             new GepInstruction(dst, addr, offs, now_bb);
             return;
         }
-        addr = new Operand(new TemporarySymbolEntry(new PointerType(TypeSystem::intType), SymbolTable::getLabel()));
+        if (((ArrayType *)se->getType())->getBaseType()->isInt())
+            addr = new Operand(new TemporarySymbolEntry(new PointerType(TypeSystem::intType), SymbolTable::getLabel()));
+        else if (((ArrayType *)se->getType())->getBaseType()->isFloat())
+            addr = new Operand(new TemporarySymbolEntry(new PointerType(TypeSystem::floatType), SymbolTable::getLabel()));
         new GepInstruction(addr, se->getAddr(), offs, now_bb);
     }
     else if (se->getType()->isPtr())
@@ -546,7 +648,10 @@ void Id::genCode()
             offs.push_back(tmp->getOperand());
             tmp = (ExprNode *)tmp->getNext();
         }
-        addr = new Operand(new TemporarySymbolEntry(new PointerType(TypeSystem::intType), SymbolTable::getLabel()));
+        if (((ArrayType *)((PointerType *)se->getType())->getType())->getBaseType()->isInt())
+            addr = new Operand(new TemporarySymbolEntry(new PointerType(TypeSystem::intType), SymbolTable::getLabel()));
+        else if (((ArrayType *)((PointerType *)se->getType())->getType())->getBaseType()->isFloat())
+            addr = new Operand(new TemporarySymbolEntry(new PointerType(TypeSystem::floatType), SymbolTable::getLabel()));
         new GepInstruction(addr, base, offs, now_bb, true);
     }
     new LoadInstruction(dst, addr, now_bb);
@@ -556,21 +661,39 @@ void ImplictCastExpr::genCode()
 {
     expr->genCode();
     // bool转int
-    if (b2i)
+    if (op == BTI)
     {
         new ZextInstruction(dst, expr->getOperand(), true, now_bb);
     }
     // int转bool
-    else
+    else if (op == ITB)
     {
         new CmpInstruction(CmpInstruction::NE, dst, expr->getOperand(), new Operand(new ConstantSymbolEntry(TypeSystem::intType, 0)), now_bb);
-        if (this->isCond)
-        {
-            BasicBlock *interB;
-            interB = new BasicBlock(now_func);
-            true_list.push_back(new CondBrInstruction(nullptr, interB, dst, now_bb));
-            false_list.push_back(new UncondBrInstruction(nullptr, interB));
-        }
+    }
+    else if (op == FTI)
+    {
+        new F2IInstruction(dst, expr->getOperand(), now_bb);
+    }
+    else if (op == ITF)
+    {
+        new I2FInstruction(dst, expr->getOperand(), now_bb);
+    }
+    else if (op == FTB)
+    {
+        new CmpInstruction(CmpInstruction::NE, dst, expr->getOperand(), new Operand(new ConstantSymbolEntry(TypeSystem::floatType, 0)), now_bb);
+    }
+    else if (op == BTF)
+    {
+        Operand *internal_op = new Operand(new TemporarySymbolEntry(TypeSystem::intType, SymbolTable::getLabel()));
+        new ZextInstruction(internal_op, expr->getOperand(), true, now_bb);
+        new I2FInstruction(dst, internal_op, now_bb);
+    }
+    if (this->isCond)
+    {
+        BasicBlock *interB;
+        interB = new BasicBlock(now_func);
+        true_list.push_back(new CondBrInstruction(nullptr, interB, dst, now_bb));
+        false_list.push_back(new UncondBrInstruction(nullptr, interB));
     }
 }
 
@@ -641,6 +764,8 @@ void DeclStmt::genCode()
         }
         if (se->getType()->isArray() && exprArray) // 如果数组有初始化
         {
+            Type *eleType = ((ArrayType *)se->getType())->getBaseType();
+            Type *baseType = eleType->isFloat() ? TypeSystem::floatType : TypeSystem::intType;
             std::vector<int> indexs = ((ArrayType *)se->getType())->getIndexs();
             int size = se->getType()->getSize() / TypeSystem::intType->getSize();
             std::vector<Operand *> offs;
@@ -650,11 +775,11 @@ void DeclStmt::genCode()
             }
             indexs = ((ArrayType *)se->getType())->getIndexs();
             // 因为数组初始化可能会用到很多零，这里我们先准备一个，然后之后就不用频繁load了
-            Operand *zeroReg = new Operand(new TemporarySymbolEntry(TypeSystem::intType, SymbolTable::getLabel()));
-            Operand *zero = new Operand(new ConstantSymbolEntry(TypeSystem::intType, 0));
+            Operand *zeroReg = new Operand(new TemporarySymbolEntry(baseType, SymbolTable::getLabel()));
+            Operand *zero = new Operand(new ConstantSymbolEntry(baseType, 0));
             new BinaryInstruction(BinaryInstruction::ADD, zeroReg, zero, zero, now_bb);
-            Operand *ele_addr = new Operand(new TemporarySymbolEntry(new PointerType(TypeSystem::intType), SymbolTable::getLabel()));
-            Operand *step = new Operand(new ConstantSymbolEntry(TypeSystem::intType, 4));
+            Operand *ele_addr = new Operand(new TemporarySymbolEntry(new PointerType(new ArrayType({}, baseType)), SymbolTable::getLabel()));
+            Operand *step = new Operand(new ConstantSymbolEntry(TypeSystem::intType, 1));
             new GepInstruction(ele_addr, se->getAddr(), offs, now_bb);
             for (int i = 0; i < size; i++)
             {
@@ -667,7 +792,13 @@ void DeclStmt::genCode()
                 {
                     new StoreInstruction(ele_addr, zeroReg, now_bb);
                 }
-                new BinaryInstruction(BinaryInstruction::ADD, ele_addr, ele_addr, step, now_bb);
+                if (i != size - 1)
+                {
+                    Operand *next_addr = new Operand(new TemporarySymbolEntry(new PointerType(new ArrayType({}, eleType)), SymbolTable::getLabel()));
+                    new GepInstruction(next_addr, ele_addr, {step}, now_bb, true);
+                    ele_addr = next_addr;
+                }
+                // new BinaryInstruction(BinaryInstruction::ADD, ele_addr, ele_addr, step, now_bb);
             }
             // for (int i = 0; i < size; i++) {
             //     if (exprArray[i]) {
@@ -681,6 +812,25 @@ void DeclStmt::genCode()
     if (this->getNext())
     {
         this->getNext()->genCode();
+    }
+}
+
+void DeclStmt::setInitArray(ExprNode **exprArray)
+{
+    // 能走到这一步，id就是个数组
+    Type *idBaseType = ((ArrayType *)id->getSymPtr()->getType())->getBaseType();
+    this->exprArray = exprArray;
+    int size = id->getSymPtr()->getType()->getSize() / TypeSystem::intType->getSize();
+    for (int i = 0; i < size; i++)
+    {
+        if (this->exprArray[i])
+        {
+            // 这里考虑这一种就行，因为sysy里面整形数组初始元素只能是整数，但是浮点数不是
+            if (this->exprArray[i]->getType()->isInt() && idBaseType->isFloat())
+            {
+                this->exprArray[i] = new ImplictCastExpr(this->exprArray[i], ImplictCastExpr::ITF);
+            }
+        }
     }
 }
 
@@ -808,7 +958,10 @@ void AssignStmt::genCode()
             offs.push_back(index->getOperand());
             index = (ExprNode *)index->getNext();
         }
-        addr = new Operand(new TemporarySymbolEntry(new PointerType(TypeSystem::intType), SymbolTable::getLabel()));
+        if (((ArrayType *)se->getType())->getBaseType()->isInt())
+            addr = new Operand(new TemporarySymbolEntry(new PointerType(TypeSystem::intType), SymbolTable::getLabel()));
+        else if (((ArrayType *)se->getType())->getBaseType()->isFloat())
+            addr = new Operand(new TemporarySymbolEntry(new PointerType(TypeSystem::floatType), SymbolTable::getLabel()));
         new GepInstruction(addr, se->getAddr(), offs, now_bb);
     }
     else if (se->getType()->isPtr())
@@ -823,7 +976,10 @@ void AssignStmt::genCode()
             offs.push_back(tmp->getOperand());
             tmp = (ExprNode *)tmp->getNext();
         }
-        addr = new Operand(new TemporarySymbolEntry(new PointerType(TypeSystem::intType), SymbolTable::getLabel()));
+        if (((ArrayType *)(((PointerType *)se->getType())->getType()))->getBaseType()->isInt())
+            addr = new Operand(new TemporarySymbolEntry(new PointerType(TypeSystem::intType), SymbolTable::getLabel()));
+        if (((ArrayType *)(((PointerType *)se->getType())->getType()))->getBaseType()->isFloat())
+            addr = new Operand(new TemporarySymbolEntry(new PointerType(TypeSystem::floatType), SymbolTable::getLabel()));
         new GepInstruction(addr, base, offs, now_bb, true);
     }
     new StoreInstruction(addr, src, now_bb);
@@ -872,9 +1028,13 @@ void FunctionDef::genCode()
         }
         else if (!lastIns->isRet())
         { // 如果这个块没有后继，而且没有ret
-            if (((FunctionType *)now_func->getSymPtr()->getType())->getRetType() == TypeSystem::intType)
+            if (((FunctionType *)now_func->getSymPtr()->getType())->getRetType()->isInt())
             {
                 new RetInstruction(new Operand(new ConstantSymbolEntry(TypeSystem::intType, 0)), (*b));
+            }
+            if (((FunctionType *)now_func->getSymPtr()->getType())->getRetType()->isFloat())
+            {
+                new RetInstruction(new Operand(new ConstantSymbolEntry(TypeSystem::floatType, 0)), (*b));
             }
             else if (((FunctionType *)now_func->getSymPtr()->getType())->getRetType() == TypeSystem::voidType)
             {
@@ -1047,12 +1207,10 @@ void CallExpr::output(int level)
         type = symbolEntry->getType()->toStr();
         scope = dynamic_cast<IdentifierSymbolEntry *>(symbolEntry)->getScope();
         fprintf(yyout, "%*cCallExpr\tfunction name: %s\tscope: %d\ttype: %s\n", level, ' ', name.c_str(), scope, type.c_str());
-        Node *temp = param;
         // 打印参数信息
-        while (temp)
+        for (auto param : params)
         {
-            temp->output(level + 4);
-            temp = temp->getNext();
+            param->output(level + 4);
         }
     }
 }
@@ -1076,6 +1234,27 @@ void Id::output(int level)
     fprintf(yyout, "%*cId\tname: %s\tscope: %d\ttype: %s\n", level, ' ', name.c_str(), scope, type.c_str());
 }
 
+double ImplictCastExpr::getValue()
+{
+    double value = expr->getValue();
+    switch (op)
+    {
+    case ITB:
+    case FTB:
+        value = (!!value);
+        break;
+    case FTI:
+        value = (int)value;
+        break;
+    case BTI:
+    case ITF:
+    case BTF:
+    default:
+        break;
+    }
+    return value;
+}
+
 void ImplictCastExpr::output(int level)
 {
     fprintf(yyout, "%*cImplictCastExpr\ttype: %s to %s\n", level, ' ', expr->getType()->toStr().c_str(), type->toStr().c_str());
@@ -1093,6 +1272,18 @@ void SeqNode::output(int level)
     stmt1->output(level);
     stmt2->output(level);
 }
+
+DeclStmt::DeclStmt(Id *id, ExprNode *expr) : id(id), expr(expr)
+{
+    this->exprArray = nullptr;
+    if (expr)
+    {
+        if (id->getType()->isFloat() && expr->getType()->isInt())
+            this->expr = new ImplictCastExpr(expr, ImplictCastExpr::ITF);
+        if (id->getType()->isInt() && expr->getType()->isFloat())
+            this->expr = new ImplictCastExpr(expr, ImplictCastExpr::FTI);
+    }
+};
 
 void DeclStmt::output(int level)
 {

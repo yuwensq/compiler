@@ -28,6 +28,7 @@ private:
     };
     MachineUnit *unit;
     MachineFunction *func;
+    std::vector<Interval *> spillIntervals; // 加这个变量也是希望能够快一点，不过最后好像差不多
     std::vector<int> regs;
     std::map<MachineOperand *, std::set<MachineOperand *>> du_chains;
     std::vector<Interval *> intervals;

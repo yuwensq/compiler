@@ -22,6 +22,7 @@ void LinearScan::allocateRegisters()
         while (!success) // repeat until all vregs can be mapped
         {
             computeLiveIntervals();
+            spillIntervals.clear();
             success = linearScanRegisterAllocation();
             if (success) // all vregs can be mapped to real regs
                 modifyCode();
@@ -193,8 +194,17 @@ bool LinearScan::linearScanRegisterAllocation()
         {
             interval->rreg = regs[0];
             regs.erase(regs.begin());
-            active.push_back(interval);
-            sort(active.begin(), active.end(), compareEnd);
+
+            std::vector<Interval*>::iterator it;
+            for (it = active.begin(); it != active.end(); it++) {
+                if ((*it)->end > interval->end) {
+                    break;
+                }
+            }
+            active.insert(it, interval);
+
+            // active.push_back(interval);
+            // sort(active.begin(), active.end(), compareEnd);
         }
     }
     return result;
@@ -214,7 +224,7 @@ void LinearScan::expireOldIntervals(Interval *interval)
         regs.push_back(actInterval->rreg);
         it = active.erase(it);
     }
-    sort(regs.begin(), regs.end());
+    // sort(regs.begin(), regs.end());
 }
 
 void LinearScan::spillAtInterval(Interval *interval)
@@ -224,13 +234,23 @@ void LinearScan::spillAtInterval(Interval *interval)
     {
         interval->rreg = active.back()->rreg;
         active.back()->spill = true;
+        spillIntervals.push_back(active.back());
         active.pop_back();
-        active.push_back(interval);
-        sort(active.begin(), active.end(), compareEnd);
+        // 按照end升序把interval插进去，不用sort看看会不会快一点
+        std::vector<Interval*>::iterator it;
+        for (it = active.begin(); it != active.end(); it++) {
+            if ((*it)->end > interval->end) {
+                break;
+            }
+        }
+        active.insert(it, interval);
+        // active.push_back(interval);
+        // sort(active.begin(), active.end(), compareEnd);
     }
     else
     {
         interval->spill = true;
+        spillIntervals.push_back(interval);
     }
 }
 
@@ -248,7 +268,7 @@ void LinearScan::modifyCode()
 
 void LinearScan::genSpillCode()
 {
-    for (auto &interval : intervals)
+    for (auto &interval : spillIntervals)
     {
         if (!interval->spill)
             continue;

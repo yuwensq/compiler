@@ -439,7 +439,8 @@ void MachineBlock::output()
         {
             this->getParent()->getParent()->printLTORG();
         }
-        else if (inst_num >= 256) { // 这里，每隔256条指令，打一个文字池
+        else if (inst_num >= 256)
+        { // 这里，每隔256条指令，打一个文字池
             inst_num = 0;
             int ltorg_num = this->getParent()->getParent()->getLtorgNum();
             fprintf(yyout, "\tb .LT%d\n", ltorg_num);
@@ -481,24 +482,29 @@ void MachineFunction::output()
     std::vector<MachineOperand *> save_regs = getSavedRegs();
     save_regs.push_back(fp);
     save_regs.push_back(lr);
+    (new StackMInstrcuton(entry, StackMInstrcuton::PUSH, save_regs))->output();
+    (new MovMInstruction(entry, MovMInstruction::MOV, fp, sp))->output();
     int stackSize = stack_size;
     auto stSize = new MachineOperand(MachineOperand::IMM, stackSize);
     if (AsmBuilder::isLegalImm(stackSize))
     {
-        entry->insertFront(new BinaryMInstruction(entry, BinaryMInstruction::SUB, sp, sp, stSize));
+        (new BinaryMInstruction(entry, BinaryMInstruction::SUB, sp, sp, stSize))->output();
     }
-    else {
+    else
+    {
         if (stackSize & 0xff)
-            entry->insertFront(new BinaryMInstruction(entry, BinaryMInstruction::SUB, sp, sp, new MachineOperand(MachineOperand::IMM, stackSize & 0xff)));
+            (new BinaryMInstruction(entry, BinaryMInstruction::SUB, sp, sp, new MachineOperand(MachineOperand::IMM, stackSize & 0xff)))->output();
         if (stackSize & 0xff00)
-            entry->insertFront(new BinaryMInstruction(entry, BinaryMInstruction::SUB, sp, sp, new MachineOperand(MachineOperand::IMM, stackSize & 0xff00)));
+            (new BinaryMInstruction(entry, BinaryMInstruction::SUB, sp, sp, new MachineOperand(MachineOperand::IMM, stackSize & 0xff00)))->output();
         if (stackSize & 0xff0000)
-            entry->insertFront(new BinaryMInstruction(entry, BinaryMInstruction::SUB, sp, sp, new MachineOperand(MachineOperand::IMM, stackSize & 0xff0000)));
+            (new BinaryMInstruction(entry, BinaryMInstruction::SUB, sp, sp, new MachineOperand(MachineOperand::IMM, stackSize & 0xff0000)))->output();
         if (stackSize & 0xff000000)
-            entry->insertFront(new BinaryMInstruction(entry, BinaryMInstruction::SUB, sp, sp, new MachineOperand(MachineOperand::IMM, stackSize & 0xff000000)));
+            (new BinaryMInstruction(entry, BinaryMInstruction::SUB, sp, sp, new MachineOperand(MachineOperand::IMM, stackSize & 0xff000000)))->output();
     }
-    entry->insertFront(new MovMInstruction(entry, MovMInstruction::MOV, fp, sp));
-    entry->insertFront(new StackMInstrcuton(entry, StackMInstrcuton::PUSH, save_regs));
+    // 这一点是最坑的，按照龟腚来说arm里面的栈指针应该8字节对齐，如果不对齐的话，可能有问题
+    // 然后这里就先算数右移三位再算数左移三位，8字节对齐一下，要不会发现浮点数有时候很奇怪
+    fprintf(yyout, "\tlsr sp, sp, #3\n");
+    fprintf(yyout, "\tlsl sp, sp, #3\n");
     for (auto iter : block_list)
     {
         iter->backPatch(save_regs);
@@ -556,7 +562,14 @@ void MachineUnit::PrintGlobalDecl()
                 fprintf(yyout, ".global %s\n", se->toStr().c_str() + 1);
                 fprintf(yyout, ".size %s, %d\n", se->toStr().c_str() + 1, se->getType()->getSize() / 8);
                 fprintf(yyout, "%s:\n", se->toStr().c_str() + 1);
-                fprintf(yyout, "\t.word %d\n", ((IdentifierSymbolEntry *)se)->getValue());
+                if (se->getType()->isInt())
+                    fprintf(yyout, "\t.word %d\n", (int)((IdentifierSymbolEntry *)se)->getValue());
+                if (se->getType()->isFloat())
+                {
+                    float value = (float)((IdentifierSymbolEntry *)se)->getValue();
+                    uint32_t num = *((uint32_t *)&value);
+                    fprintf(yyout, "\t.word %u\n", num);
+                }
             }
         }
     }
@@ -592,7 +605,10 @@ void MachineUnit::PrintGlobalDecl()
                 fprintf(yyout, ".global %s\n", se->toStr().c_str() + 1);
                 fprintf(yyout, ".size %s, %d\n", se->toStr().c_str() + 1, se->getType()->getSize() / 8);
                 fprintf(yyout, "%s:\n", se->toStr().c_str() + 1);
-                fprintf(yyout, "\t.word %d\n", ((IdentifierSymbolEntry *)se)->getValue());
+                if (se->getType()->isInt())
+                    fprintf(yyout, "\t.word %d\n", (int)((IdentifierSymbolEntry *)se)->getValue());
+                if (se->getType()->isFloat())
+                    fprintf(yyout, "\t.word %f\n", (float)((IdentifierSymbolEntry *)se)->getValue());
             }
         }
     }

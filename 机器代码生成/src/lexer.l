@@ -16,6 +16,8 @@
     }
     #include <iostream>
 %}
+DECIMAL_FLOAT ((([0-9]*[.][0-9]*([eE][+-]?[0-9]+)?)|([0-9]+[eE][+-]?[0-9]+))[fLlL]?)
+HEXADECIMAL_FLOAT (0[xX](([0-9A-Fa-f]*[.][0-9A-Fa-f]*([pP][+-]?[0-9]+)?)|([0-9A-Fa-f]+[pP][+-]?[0-9]+))[fLlL]?)
 DECIMIAL ([1-9][0-9]*|0)
 OCTAL (0[0-7]+)
 HEXADECIMAL (0[xX][0-9A-Fa-f]+)
@@ -33,6 +35,12 @@ LINECOMMENT \/\/[^\n]*
         DEBUG_FOR_LAB4("INT\tint");
     chars += strlen("int");
     return INT;
+}
+"float" {
+    if(dump_tokens)
+        DEBUG_FOR_LAB4("FLOAT\tfloat");
+    chars += strlen("float");
+    return FLOAT;
 }
 "void" {
     if(dump_tokens)
@@ -234,7 +242,6 @@ LINECOMMENT \/\/[^\n]*
     globals->install(yytext, se);
     return ID;
 }
-
 "getint" {
     if(dump_tokens)
         DEBUG_FOR_LAB4(yytext);
@@ -244,6 +251,30 @@ LINECOMMENT \/\/[^\n]*
     yylval.strtype = lexeme;
     std::vector<Type*> vec;
     Type* funcType = new FunctionType(TypeSystem::intType, vec);
+    SymbolEntry* se = new IdentifierSymbolEntry(funcType, yytext, globals->getLevel(), true);
+    globals->install(yytext, se);
+    return ID;
+}
+"putfloat" {
+    if(dump_tokens)
+        DEBUG_FOR_LAB4(yytext);
+    char *lexeme;
+    lexeme = new char[strlen(yytext) + 1];
+    strcpy(lexeme, yytext);
+    yylval.strtype = lexeme;
+    Type* funcType = new FunctionType(TypeSystem::voidType, {TypeSystem::floatType});
+    SymbolEntry* se = new IdentifierSymbolEntry(funcType, yytext, globals->getLevel(), true);
+    globals->install(yytext, se);
+    return ID;
+}
+"getfloat" {
+    if(dump_tokens)
+        DEBUG_FOR_LAB4(yytext);
+    char *lexeme;
+    lexeme = new char[strlen(yytext) + 1];
+    strcpy(lexeme, yytext);
+    yylval.strtype = lexeme;
+    Type* funcType = new FunctionType(TypeSystem::floatType, {});
     SymbolEntry* se = new IdentifierSymbolEntry(funcType, yytext, globals->getLevel(), true);
     globals->install(yytext, se);
     return ID;
@@ -302,6 +333,33 @@ LINECOMMENT \/\/[^\n]*
     globals->install(yytext, se);
     return ID;
 }
+"putfarray" {
+    if(dump_tokens)
+        DEBUG_FOR_LAB4(yytext);
+    char *lexeme;
+    lexeme = new char[strlen(yytext) + 1];
+    strcpy(lexeme, yytext);
+    yylval.strtype = lexeme;
+    std::vector<Type*> vec;
+    vec.push_back(TypeSystem::intType);
+    vec.push_back(new PointerType(new ArrayType({}, TypeSystem::floatType)));
+    Type* funcType = new FunctionType(TypeSystem::voidType, vec);
+    SymbolEntry* se = new IdentifierSymbolEntry(funcType, yytext, globals->getLevel(), true);
+    globals->install(yytext, se);
+    return ID;
+}
+"getfarray" {
+    if(dump_tokens)
+        DEBUG_FOR_LAB4(yytext);
+    char *lexeme;
+    lexeme = new char[strlen(yytext) + 1];
+    strcpy(lexeme, yytext);
+    yylval.strtype = lexeme;
+    Type* funcType = new FunctionType(TypeSystem::intType, {new PointerType(new ArrayType({}, TypeSystem::floatType))});
+    SymbolEntry* se = new IdentifierSymbolEntry(funcType, yytext, globals->getLevel(), true);
+    globals->install(yytext, se);
+    return ID;
+}
 {DECIMIAL} {
     if(dump_tokens)
         DEBUG_FOR_LAB4(string("NUMBER\t") + string(yytext));
@@ -324,6 +382,22 @@ LINECOMMENT \/\/[^\n]*
         DEBUG_FOR_LAB4(string("NUMBER\t") + to_string(temp));
     yylval.inttype = temp;
     return INTEGER;
+}
+{DECIMAL_FLOAT} {
+    double temp;
+    sscanf(yytext, "%lf", &temp);
+    if (dump_tokens) 
+        DEBUG_FOR_LAB4(string("FLOATNUMBER\t") + to_string(temp));
+    yylval.floattype = temp;
+    return FLOATNUM;
+}
+{HEXADECIMAL_FLOAT} {
+    float temp;
+    sscanf(yytext, "%f", &temp);
+    if (dump_tokens) 
+        DEBUG_FOR_LAB4(string("FLOATNUMBER\t") + to_string(temp));
+    yylval.floattype = temp;
+    return FLOATNUM;
 }
 {ID} {
     if(dump_tokens)

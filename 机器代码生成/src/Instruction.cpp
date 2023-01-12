@@ -3,6 +3,7 @@
 #include <iostream>
 #include <cmath>
 #include <assert.h>
+#include <string>
 #include "Function.h"
 #include "Type.h"
 #include "MachineCode.h"
@@ -137,6 +138,7 @@ BinaryInstruction::BinaryInstruction(unsigned opcode, Operand *dst, Operand *src
     dst->setDef(this);
     src1->addUse(this);
     src2->addUse(this);
+    floatVersion = (src1->getType()->isFloat() || src2->getType()->isFloat());
 }
 
 BinaryInstruction::~BinaryInstruction()
@@ -158,16 +160,16 @@ void BinaryInstruction::output() const
     switch (opcode)
     {
     case ADD:
-        op = "add";
+        op = floatVersion ? "fadd" : "add";
         break;
     case SUB:
-        op = "sub";
+        op = floatVersion ? "fsub" : "sub";
         break;
     case MUL:
-        op = "mul";
+        op = floatVersion ? "fmul" : "mul";
         break;
     case DIV:
-        op = "sdiv";
+        op = floatVersion ? "fdiv" : "sdiv";
         break;
     case MOD:
         op = "srem";
@@ -187,6 +189,7 @@ CmpInstruction::CmpInstruction(unsigned opcode, Operand *dst, Operand *src1, Ope
     dst->setDef(this);
     src1->addUse(this);
     src2->addUse(this);
+    floatVersion = (src1->getType()->isFloat() || src2->getType()->isFloat());
 }
 
 CmpInstruction::~CmpInstruction()
@@ -208,29 +211,29 @@ void CmpInstruction::output() const
     switch (opcode)
     {
     case E:
-        op = "eq";
+        op = floatVersion ? "oeq" : "eq";
         break;
     case NE:
-        op = "ne";
+        op = floatVersion ? "une" : "ne";
         break;
     case L:
-        op = "slt";
+        op = floatVersion ? "olt" : "slt";
         break;
     case LE:
-        op = "sle";
+        op = floatVersion ? "ole" : "sle";
         break;
     case G:
-        op = "sgt";
+        op = floatVersion ? "ogt" : "sgt";
         break;
     case GE:
-        op = "sge";
+        op = floatVersion ? "oge" : "sge";
         break;
     default:
         op = "";
         break;
     }
-
-    fprintf(yyout, "  %s = icmp %s %s %s, %s\n", dst.c_str(), op.c_str(), type.c_str(), src1.c_str(), src2.c_str());
+    std::string cmp = floatVersion ? "fcmp" : "icmp";
+    fprintf(yyout, "  %s = %s %s %s %s, %s\n", dst.c_str(), cmp.c_str(), op.c_str(), type.c_str(), src1.c_str(), src2.c_str());
 }
 
 UncondBrInstruction::UncondBrInstruction(BasicBlock *to, BasicBlock *insert_bb) : Instruction(UNCOND, insert_bb)
@@ -407,7 +410,17 @@ MachineOperand *Instruction::genMachineOperand(Operand *ope, AsmBuilder *builder
     auto se = ope->getEntry();
     MachineOperand *mope = nullptr;
     if (se->isConstant())
-        mope = new MachineOperand(MachineOperand::IMM, dynamic_cast<ConstantSymbolEntry *>(se)->getValue());
+    {
+        // 这里，如果一个立即数是浮点数，我们把它当成一个无符号32位数就行。
+        if (se->getType()->isFloat())
+        {
+            float value = (float)dynamic_cast<ConstantSymbolEntry *>(se)->getValue();
+            uint32_t v = reinterpret_cast<uint32_t &>(value);
+            mope = new MachineOperand(MachineOperand::IMM, v);
+        }
+        else
+            mope = new MachineOperand(MachineOperand::IMM, dynamic_cast<ConstantSymbolEntry *>(se)->getValue());
+    }
     else if (se->isTemporary())
     {
         if (((TemporarySymbolEntry *)se)->isParam() && builder)
@@ -521,7 +534,7 @@ void LoadInstruction::genMachineCode(AsmBuilder *builder)
         auto dst = genMachineOperand(operands[0]);
         auto src1 = genMachineReg(11);
         int offset = dynamic_cast<TemporarySymbolEntry *>(operands[1]->getEntry())->getOffset();
-        if (AsmBuilder::isLegalImm(offset)) // 是合法立即数
+        if (AsmBuilder::isLegalImm(offset) || offset > -255) // 是合法立即数
         {
             cur_inst = new LoadMInstruction(cur_block, dst, src1, genMachineImm(offset));
             cur_block->InsertInst(cur_inst);
@@ -556,7 +569,7 @@ void StoreInstruction::genMachineCode(AsmBuilder *builder)
     auto cur_block = builder->getBlock();
     MachineInstruction *cur_inst = nullptr;
     auto src = genMachineOperand(operands[1], builder);
-    if (src->isImm())
+    if (src->isImm()) // 这里立即数可能为浮点数，这样做也没问题
     {
         src = new MachineOperand(*immToVReg(src, cur_block));
     }
@@ -582,7 +595,7 @@ void StoreInstruction::genMachineCode(AsmBuilder *builder)
         // cur_inst = new StoreMInstruction(cur_block, src, dst, off);
         // cur_block->InsertInst(cur_inst);
         int offset = dynamic_cast<TemporarySymbolEntry *>(operands[0]->getEntry())->getOffset();
-        if (AsmBuilder::isLegalImm(offset))
+        if (AsmBuilder::isLegalImm(offset) || offset > -255)
         {
             cur_inst = new StoreMInstruction(cur_block, src, dst, genMachineImm(offset));
             cur_block->InsertInst(cur_inst);
@@ -613,6 +626,7 @@ void BinaryInstruction::genMachineCode(AsmBuilder *builder)
 {
     // TODO:
     // complete other instructions
+    // 这个函数要改改，软浮点要调用一些ABI
     auto cur_block = builder->getBlock();
     auto dst = genMachineOperand(operands[0]);
     auto src1 = genMachineOperand(operands[1]);
@@ -627,44 +641,66 @@ void BinaryInstruction::genMachineCode(AsmBuilder *builder)
     {
         src1 = new MachineOperand(*immToVReg(src1, cur_block));
     }
-    if (src2->isImm() && (opcode == MUL || opcode == DIV || opcode == MOD))
+    if (src2->isImm())
     {
-        src2 = new MachineOperand(*immToVReg(src2, cur_block));
-    }
-    else if (src2->isImm() && !AsmBuilder::isLegalImm(src2->getVal()))
-    {
-        src2 = new MachineOperand(*immToVReg(src2, cur_block));
-    }
-    switch (opcode)
-    {
-    case ADD:
-        cur_inst = new BinaryMInstruction(cur_block, BinaryMInstruction::ADD, dst, src1, src2);
-        break;
-    case SUB:
-        cur_inst = new BinaryMInstruction(cur_block, BinaryMInstruction::SUB, dst, src1, src2);
-        break;
-    case MUL:
-        cur_inst = new BinaryMInstruction(cur_block, BinaryMInstruction::MUL, dst, src1, src2);
-        break;
-    case DIV:
-        cur_inst = new BinaryMInstruction(cur_block, BinaryMInstruction::DIV, dst, src1, src2);
-        break;
-    case AND:
-        cur_inst = new BinaryMInstruction(cur_block, BinaryMInstruction::AND, dst, src1, src2);
-        break;
-    case OR:
-        cur_inst = new BinaryMInstruction(cur_block, BinaryMInstruction::OR, dst, src1, src2);
-        break;
-    case MOD:
-        // arm里没有模指令，要除乘减结合，来算余数
+        if (floatVersion) // 如果是浮点数，直接放寄存器里得了
         {
-            cur_block->InsertInst(new BinaryMInstruction(cur_block, BinaryMInstruction::DIV, dst, src1, src2));
-            cur_block->InsertInst(new BinaryMInstruction(cur_block, BinaryMInstruction::MUL, new MachineOperand(*dst), new MachineOperand(*dst), new MachineOperand(*src2)));
-            cur_inst = new BinaryMInstruction(cur_block, BinaryMInstruction::SUB, new MachineOperand(*dst), new MachineOperand(*src1), new MachineOperand(*dst));
+            src2 = new MachineOperand(*immToVReg(src2, cur_block));
         }
-        break;
-    default:
-        break;
+        else if (opcode == MUL || opcode == DIV || opcode == MOD || !AsmBuilder::isLegalImm(src2->getVal()))
+        {
+            // int类型，按需放寄存器里
+            src2 = new MachineOperand(*immToVReg(src2, cur_block));
+        }
+    }
+    if (floatVersion && (opcode == ADD || opcode == SUB || opcode == MUL || opcode == DIV))
+    {
+        // https://developer.arm.com/documentation/dui0475/m/floating-point-support/the-software-floating-point-library--fplib/calling-fplib-routines
+        std::string funcs[] = {"@__aeabi_fadd",
+                               "@__aeabi_fsub",
+                               "@__aeabi_fmul",
+                               "@__aeabi_fdiv"}; // 这里把四个函数先准备好，顺序要摆好
+        // 浮点数，加减乘除，先把参数给mov到r0和r1里
+        cur_block->InsertInst(new MovMInstruction(cur_block, MovMInstruction::MOV, genMachineReg(0), src1));
+        cur_block->InsertInst(new MovMInstruction(cur_block, MovMInstruction::MOV, genMachineReg(1), src2));
+        // 然后调用相关的方法
+        cur_block->InsertInst(new BranchMInstruction(cur_block, BranchMInstruction::BL, new MachineOperand(funcs[opcode])));
+        // 最后把结果给mov到dst里
+        cur_inst = new MovMInstruction(cur_block, MovMInstruction::MOV, dst, genMachineReg(0));
+    }
+    else // 否则就是整数操作
+    {
+        switch (opcode)
+        {
+        case ADD:
+            cur_inst = new BinaryMInstruction(cur_block, BinaryMInstruction::ADD, dst, src1, src2);
+            break;
+        case SUB:
+            cur_inst = new BinaryMInstruction(cur_block, BinaryMInstruction::SUB, dst, src1, src2);
+            break;
+        case MUL:
+            cur_inst = new BinaryMInstruction(cur_block, BinaryMInstruction::MUL, dst, src1, src2);
+            break;
+        case DIV:
+            cur_inst = new BinaryMInstruction(cur_block, BinaryMInstruction::DIV, dst, src1, src2);
+            break;
+        case AND: // 下边这俩，操作数不会是浮点数，因为已经被隐式转化了
+            cur_inst = new BinaryMInstruction(cur_block, BinaryMInstruction::AND, dst, src1, src2);
+            break;
+        case OR:
+            cur_inst = new BinaryMInstruction(cur_block, BinaryMInstruction::OR, dst, src1, src2);
+            break;
+        case MOD:
+            // arm里没有模指令，要除乘减结合，来算余数
+            {
+                cur_block->InsertInst(new BinaryMInstruction(cur_block, BinaryMInstruction::DIV, dst, src1, src2));
+                cur_block->InsertInst(new BinaryMInstruction(cur_block, BinaryMInstruction::MUL, new MachineOperand(*dst), new MachineOperand(*dst), new MachineOperand(*src2)));
+                cur_inst = new BinaryMInstruction(cur_block, BinaryMInstruction::SUB, new MachineOperand(*dst), new MachineOperand(*src1), new MachineOperand(*dst));
+            }
+            break;
+        default:
+            break;
+        }
     }
     cur_block->InsertInst(cur_inst);
 }
@@ -673,6 +709,7 @@ void CmpInstruction::genMachineCode(AsmBuilder *builder)
 {
     // TODO
     // 简简单单生成一条cmp指令就行
+    // 加了浮点数，这里也要改
     auto cur_block = builder->getBlock();
     auto src1 = genMachineOperand(operands[1]);
     auto src2 = genMachineOperand(operands[2]);
@@ -684,53 +721,82 @@ void CmpInstruction::genMachineCode(AsmBuilder *builder)
     {
         src2 = new MachineOperand(*immToVReg(src2, cur_block));
     }
-    cur_block->InsertInst(new CmpMInstruction(cur_block, src1, src2));
     // 这里借助builder向br指令传cond
     int cmpOpCode = 0, minusOpCode = 0;
-    switch (opcode)
+    if (floatVersion)
     {
-    case E:
-    {
-        cmpOpCode = CmpMInstruction::EQ;
-        minusOpCode = CmpMInstruction::NE;
-    }
-    break;
-    case NE:
-    {
+        // std::string funcs[] = {"@_fcmpeq",
+        //                        "@_fcmpge",
+        //                        "@_fcmple"}; // 这里这三个函数会改标志位
+        std::string funcs[] = {"@__aeabi_fcmpeq",
+                               "@__aeabi_fcmpeq",
+                               "@__aeabi_fcmpge",
+                               "@__aeabi_fcmplt",
+                               "@__aeabi_fcmple",
+                               "@__aeabi_fcmpgt"}; // 这里这三个函数会改标志位
+                                                   // 先传参
+        cur_block->InsertInst(new MovMInstruction(cur_block, MovMInstruction::MOV, genMachineReg(0), src1));
+        cur_block->InsertInst(new MovMInstruction(cur_block, MovMInstruction::MOV, genMachineReg(1), src2));
+        // 再调用，这里的写法其实有点危险，扩展性不咋滴，但是能少写代码
+        cur_block->InsertInst(new BranchMInstruction(cur_block, BranchMInstruction::BL, new MachineOperand(funcs[opcode])));
+        cur_block->InsertInst(new CmpMInstruction(cur_block, genMachineReg(0), genMachineImm(0)));
+        // 这里条件码只剩两个了
         cmpOpCode = CmpMInstruction::NE;
         minusOpCode = CmpMInstruction::EQ;
+        if (opcode == NE)
+        {
+            cmpOpCode = CmpMInstruction::EQ;
+            minusOpCode = CmpMInstruction::NE;
+        }
     }
-    break;
-    case L:
-    {
-        cmpOpCode = CmpMInstruction::LT;
-        minusOpCode = CmpMInstruction::GE;
-    }
-    break;
-    case LE:
-    {
-        cmpOpCode = CmpMInstruction::LE;
-        minusOpCode = CmpMInstruction::GT;
-    }
-    break;
-    case G:
-    {
-        cmpOpCode = CmpMInstruction::GT;
-        minusOpCode = CmpMInstruction::LE;
-    }
-    break;
-    case GE:
-    {
-        cmpOpCode = CmpMInstruction::GE;
-        minusOpCode = CmpMInstruction::LT;
-    }
-    break;
-    default:
+    else
+    { // 不是浮点的，直接生成普通cmp就行
+        cur_block->InsertInst(new CmpMInstruction(cur_block, src1, src2));
+        switch (opcode)
+        {
+        case E:
+        {
+            cmpOpCode = CmpMInstruction::EQ;
+            minusOpCode = CmpMInstruction::NE;
+        }
         break;
+        case NE:
+        {
+            cmpOpCode = CmpMInstruction::NE;
+            minusOpCode = CmpMInstruction::EQ;
+        }
+        break;
+        case L:
+        {
+            cmpOpCode = CmpMInstruction::LT;
+            minusOpCode = CmpMInstruction::GE;
+        }
+        break;
+        case LE:
+        {
+            cmpOpCode = CmpMInstruction::LE;
+            minusOpCode = CmpMInstruction::GT;
+        }
+        break;
+        case G:
+        {
+            cmpOpCode = CmpMInstruction::GT;
+            minusOpCode = CmpMInstruction::LE;
+        }
+        break;
+        case GE:
+        {
+            cmpOpCode = CmpMInstruction::GE;
+            minusOpCode = CmpMInstruction::LT;
+        }
+        break;
+        default:
+            break;
+        }
     }
     auto dst = genMachineOperand(operands[0]);
     cur_block->InsertInst(new MovMInstruction(cur_block, MovMInstruction::MOV, dst, genMachineImm(1), cmpOpCode));
-    cur_block->InsertInst(new MovMInstruction(cur_block, MovMInstruction::MOV, new MachineOperand(*dst), genMachineImm(0), minusOpCode));
+    cur_block->InsertInst(new MovMInstruction(cur_block, MovMInstruction::MOV, dst, genMachineImm(0), minusOpCode));
     builder->setCmpOpcode(cmpOpCode);
 }
 
@@ -831,7 +897,7 @@ void XorInstruction::genMachineCode(AsmBuilder *builder)
     auto src = genMachineOperand(operands[1]);
     cur_block->InsertInst(new CmpMInstruction(cur_block, src, genMachineImm(0)));
     cur_block->InsertInst(new MovMInstruction(cur_block, MovMInstruction::MOV, dst, genMachineImm(1), CmpMInstruction::EQ));
-    cur_block->InsertInst(new MovMInstruction(cur_block, MovMInstruction::MOV, new MachineOperand(*dst), genMachineImm(0), CmpMInstruction::NE));
+    cur_block->InsertInst(new MovMInstruction(cur_block, MovMInstruction::MOV, dst, genMachineImm(0), CmpMInstruction::NE));
     builder->setCmpOpcode(CmpMInstruction::EQ);
 }
 
@@ -849,6 +915,8 @@ void GepInstruction::genMachineCode(AsmBuilder *builder)
     // type2表示是不是通过传参传过来的数组指针，为true表示是，否则表示局部变量或者全局变量
     auto cur_block = builder->getBlock();
     auto dst = genMachineOperand(operands[0]);
+    // 这里就是对于局部变量或者全局变量，要先把它们地址放到一个临时寄存器里，
+    // 而函数参数，其实operand[1]就存的有地址
     auto base = type2 ? genMachineOperand(operands[1]) : genMachineVReg();
     // 全局变量，先load
     if (operands[1]->getEntry()->isVariable() && dynamic_cast<IdentifierSymbolEntry *>(operands[1]->getEntry())->isGlobal())
@@ -862,7 +930,7 @@ void GepInstruction::genMachineCode(AsmBuilder *builder)
         // 偏移都是负数
         int offset = ((TemporarySymbolEntry *)operands[1]->getEntry())->getOffset();
         auto off = genMachineImm(offset);
-        if (AsmBuilder::isLegalImm(offset))
+        if (AsmBuilder::isLegalImm(offset) || offset > -255)
         {
             cur_block->InsertInst(new BinaryMInstruction(cur_block, BinaryMInstruction::ADD, base, genMachineReg(11), off));
             base = new MachineOperand(*base);
@@ -978,4 +1046,69 @@ void GepInstruction::output() const
         fprintf(yyout, ", i32 %s", operands[i]->toStr().c_str());
     }
     fprintf(yyout, "\n");
+}
+
+F2IInstruction::F2IInstruction(Operand *dst, Operand *src, BasicBlock *insert_bb) : Instruction(FPTSI, insert_bb)
+{
+    operands.push_back(dst);
+    operands.push_back(src);
+    dst->setDef(this);
+    src->addUse(this);
+}
+
+void F2IInstruction::output() const
+{
+    std::string dst, src;
+    dst = operands[0]->toStr();
+    src = operands[1]->toStr();
+    fprintf(yyout, "  %s = fptosi float %s to i32\n", dst.c_str(), src.c_str());
+}
+
+void F2IInstruction::genMachineCode(AsmBuilder *builder)
+{ // 浮点转int
+    auto cur_block = builder->getBlock();
+    auto dst = genMachineOperand(operands[0]);
+    auto src = genMachineOperand(operands[1]);
+    if (src->isImm())
+    { // 按理说立即数其实可以不用这条指令的，我们直接强制类型转化一下就行
+        // 但是需要在生成语法树的时候做更多工作，这里偷个懒
+        src = new MachineOperand(*immToVReg(src, cur_block));
+    }
+    std::string funcName = "@__aeabi_f2iz"; // arm官网上显示的这个_ffix，但是用不了，估计没有库
+    // 调用ABI
+    cur_block->InsertInst(new MovMInstruction(cur_block, MovMInstruction::MOV, genMachineReg(0), src));
+    cur_block->InsertInst(new BranchMInstruction(cur_block, BranchMInstruction::BL, new MachineOperand(funcName)));
+    cur_block->InsertInst(new MovMInstruction(cur_block, MovMInstruction::MOV, dst, genMachineReg(0)));
+}
+
+I2FInstruction::I2FInstruction(Operand *dst, Operand *src, BasicBlock *insert_bb) : Instruction(SITFP, insert_bb)
+{
+    operands.push_back(dst);
+    operands.push_back(src);
+    dst->setDef(this);
+    src->addUse(this);
+}
+
+void I2FInstruction::output() const
+{
+    std::string dst, src;
+    dst = operands[0]->toStr();
+    src = operands[1]->toStr();
+    fprintf(yyout, "  %s = sitofp i32 %s to float\n", dst.c_str(), src.c_str());
+}
+
+void I2FInstruction::genMachineCode(AsmBuilder *builder)
+{
+    auto cur_block = builder->getBlock();
+    auto dst = genMachineOperand(operands[0]);
+    auto src = genMachineOperand(operands[1]);
+    if (src->isImm())
+    {
+        src = new MachineOperand(*immToVReg(src, cur_block));
+    }
+    std::string funcName = "@__aeabi_i2f"; // arm官网上显示的这个_fflt
+    // 调用ABI
+    cur_block->InsertInst(new MovMInstruction(cur_block, MovMInstruction::MOV, genMachineReg(0), src));
+    cur_block->InsertInst(new BranchMInstruction(cur_block, BranchMInstruction::BL, new MachineOperand(funcName)));
+    cur_block->InsertInst(new MovMInstruction(cur_block, MovMInstruction::MOV, dst, genMachineReg(0)));
 }

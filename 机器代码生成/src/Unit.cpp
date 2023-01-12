@@ -2,6 +2,7 @@
 #include "Type.h"
 #include "AsmBuilder.h"
 #include "MachineCode.h"
+#include <sstream>
 extern FILE *yyout;
 
 void Unit::insertFunc(Function *f)
@@ -22,7 +23,16 @@ void Unit::output() const
         IdentifierSymbolEntry *se = (IdentifierSymbolEntry *)var;
         if (!se->getType()->isArray())
         {
-            fprintf(yyout, "%s = global %s %d, align 4\n", se->toStr().c_str(), se->getType()->toStr().c_str(), se->getValue());
+            double value = se->getValue();
+            if (se->getType()->isInt())
+                fprintf(yyout, "%s = global %s %d, align 4\n", se->toStr().c_str(), se->getType()->toStr().c_str(), (int)value);
+            else if (se->getType()->isFloat())
+            {
+                value = (float)value;
+                uint64_t v = reinterpret_cast<uint64_t&>(value);
+                fprintf(yyout, "%s = global %s 0x%lx, align 4\n", se->toStr().c_str(), se->getType()->toStr().c_str(), v);
+                // fprintf(yyout, "%s = global %s %f, align 4\n", se->toStr().c_str(), se->getType()->toStr().c_str(), (float)value);
+            }
         }
         else
         {

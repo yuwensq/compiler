@@ -26,14 +26,9 @@ bool SymbolEntry::setNext(SymbolEntry *se)
     return true;
 }
 
-ConstantSymbolEntry::ConstantSymbolEntry(Type *type, int value) : SymbolEntry(type, SymbolEntry::CONSTANT)
+ConstantSymbolEntry::ConstantSymbolEntry(Type *type, double value) : SymbolEntry(type, SymbolEntry::CONSTANT)
 {
     this->value = value;
-}
-
-ConstantSymbolEntry::ConstantSymbolEntry(Type *type, std::string value) : SymbolEntry(type, SymbolEntry::CONSTANT)
-{
-    this->strValue = value;
 }
 
 ConstantSymbolEntry::ConstantSymbolEntry(Type *type) : SymbolEntry(type, SymbolEntry::CONSTANT)
@@ -43,7 +38,21 @@ ConstantSymbolEntry::ConstantSymbolEntry(Type *type) : SymbolEntry(type, SymbolE
 std::string ConstantSymbolEntry::toStr()
 {
     std::ostringstream buffer;
-    buffer << value;
+    if (type->isInt())
+        buffer << (int)value;
+    else if (type->isFloat())
+    {
+        // 浮点数麻烦，直接打印16进制得了
+        /* 终于找到了
+        AFAIK just printing a decimal float works. If you
+really want a hexadecimal encoding, just reinterpret the
+floating-point number as an integer and print in hexadecimal; an "LLVM
+float" is just an IEEE float printed in hexadecimal.
+        */
+        double fv = (float)value;
+        uint64_t v = reinterpret_cast<uint64_t &>(fv);
+        buffer << "0x" << std::hex << v;
+    }
     return buffer.str();
 }
 
@@ -62,13 +71,17 @@ IdentifierSymbolEntry::IdentifierSymbolEntry(Type *type, std::string name, int s
     addr = nullptr;
 }
 
-void IdentifierSymbolEntry::setValue(int value)
+void IdentifierSymbolEntry::setValue(double value)
 {
-    if (this->getType()->isInt() && ((IntType *)this->getType())->isConst())
+    if (this->getType()->isInt() && ((IntType *)this->getType())->isConst() ||
+        this->getType()->isFloat() && ((FloatType *)this->getType())->isConst())
     {
         if (!initial)
         {
-            this->value = value;
+            if (this->getType()->isInt())
+                this->value = (int)value;
+            else
+                this->value = value;
             initial = true;
         }
         else
@@ -78,7 +91,10 @@ void IdentifierSymbolEntry::setValue(int value)
     }
     else
     {
-        this->value = value;
+        if (this->getType()->isInt())
+            this->value = (int)value;
+        else
+            this->value = value;
     }
 }
 

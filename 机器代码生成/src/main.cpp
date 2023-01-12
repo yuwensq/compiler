@@ -64,6 +64,7 @@ int main(int argc, char *argv[])
         fprintf(stderr, "%s: fail to open output file\n", outfile);
         exit(EXIT_FAILURE);
     }
+    // dump_tokens = true;
     yyparse();
     if (dump_ast)
         ast.output();

@@ -16,7 +16,8 @@ protected:
         VOID,
         FUNC,
         PTR,
-        ARRAY
+        ARRAY,
+        FLOAT
     };
     int size;
 
@@ -30,6 +31,7 @@ public:
     bool isFunc() const { return kind == FUNC; };
     bool isPtr() const { return kind == PTR; };
     bool isArray() const { return kind == ARRAY; };
+    bool isFloat() const { return kind == FLOAT; };
     int getKind() const { return kind; };
     int getSize() const { return size; };
 };
@@ -41,6 +43,17 @@ private:
 
 public:
     IntType(int size, bool constant = false) : Type(size == 1 ? Type::BOOL : Type::INT, size), constant(constant){};
+    std::string toStr();
+    bool isConst() const { return constant; };
+};
+
+class FloatType : public Type
+{
+private:
+    bool constant;
+
+public:
+    FloatType(int size, bool constant = false) : Type(Type::FLOAT, size), constant(constant){};
     std::string toStr();
     bool isConst() const { return constant; };
 };
@@ -89,14 +102,18 @@ class TypeSystem
 private:
     static IntType commonInt;
     static IntType commonBool;
+    static FloatType commonFloat;
     static VoidType commonVoid;
     static IntType commonConstInt;
+    static FloatType commonConstFloat;
 
 public:
     static Type *intType;
+    static Type *floatType;
     static Type *voidType;
     static Type *boolType;
     static Type *constIntType;
+    static Type *constFloatType;
 };
 
 class ArrayType : public Type
@@ -118,7 +135,14 @@ public:
     };
     std::string toStr();
     std::vector<int> getIndexs() { return indexs; };
-    bool isConst() { return ((IntType *)baseType)->isConst(); };
+    Type *getBaseType() { return baseType; };
+    bool isConst()
+    {
+        if (baseType->isInt())
+            return ((IntType *)baseType)->isConst();
+        else if (baseType->isFloat())
+            return ((FloatType *)baseType)->isConst();
+    };
 };
 
 #endif
