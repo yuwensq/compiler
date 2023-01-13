@@ -50,6 +50,11 @@ bool MachineOperand::operator<(const MachineOperand &a) const
 
 void MachineOperand::PrintReg()
 {
+    if (fpu)
+    { // 浮点寄存器用s
+        fprintf(yyout, "s%d", reg_no);
+        return;
+    }
     switch (reg_no)
     {
     case 11:
@@ -65,10 +70,7 @@ void MachineOperand::PrintReg()
         fprintf(yyout, "pc");
         break;
     default:
-        if (fpu) // 浮点寄存器用s
-            fprintf(yyout, "s%d", reg_no);
-        else
-            fprintf(yyout, "r%d", reg_no);
+        fprintf(yyout, "r%d", reg_no);
         break;
     }
 }
